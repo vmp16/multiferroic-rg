@@ -44,20 +44,20 @@ def plot_bands():
 
             # Plot both conduction and valence bands for this spin.
             ax.plot(
-                kx, energies[0],
+                kx, energies[0]*1e3,
                 color=color, lw=1.5,
             )
             ax.plot(
-                kx, energies[1],
+                kx, energies[1]*1e3,
                 color=color, lw=1.5, ls='--',
             )
 
-        ax.set_ylim(-0.16, 0.16)
+        ax.set_ylim(-25, 25)
         ax.set_xlim(-0.15, 0.15)
         ax.set_xticks([-0.1, 0, 0.1])
-        ax.set_yticks([-0.1, 0.0, 0.1])
+        # ax.set_yticks([-0.1, 0.0, 0.1])
         ax.tick_params(axis='both', labelsize=17)
-        ax.set_ylabel(r'Energy', fontsize=18)
+    axes[0].set_ylabel(r'Energy (meV)', fontsize=18)
 
     fig.text(0.53, 0.03, r'$k_x a$', ha='left', fontsize=18)
     plt.tight_layout(rect=[0, 0.06, 1, 0.95])

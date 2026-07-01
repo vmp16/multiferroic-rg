@@ -23,7 +23,7 @@ mu_eff = 0.0
 VALLEY_IDX = [1,-1]
 
 # Gaps
-DELTA1UP = 0.1
+DELTA1UP = 0.01
 DELTA1DN = 0.0
 DELTA2UP = DELTA1DN
 DELTA2DN = DELTA1UP
@@ -32,7 +32,7 @@ DELTAS = np.array([[DELTA1UP, DELTA1DN],
 
 # On-site energies
 E0_1UP = 0.0
-E0_1DN = 0.05
+E0_1DN = 0.005
 E0_2UP = -E0_1DN
 E0_2DN = E0_1UP
 E0_ARRAY = np.array([[E0_1UP, E0_1DN],
