@@ -1,0 +1,39 @@
+import numpy as np
+import matplotlib.pyplot as plt
+from pathlib import Path
+
+def plot_qmd():
+    project_root = Path(__file__).resolve().parent.parent
+    data_path = project_root / "data" / "scan_nlt_qmd.npz"
+    figures_dir = project_root / "figures"
+    figures_dir.mkdir(exist_ok=True)
+    
+    if not data_path.exists():
+        print(f"Error: {data_path} not found. Run scan_nlt_qmd.py first.")
+        return
+
+    data = np.load(data_path)
+    mu_vals = data['mu_vals']
+    sigmas_sym = data['sigmas_sym']
+    sigmas_asym = data['sigmas_asym']
+    
+    # Select the pertinent components to plot
+    sigma_sym_xxx = sigmas_sym[:, 0, 0, 0]
+    sigma_asym_xyy = sigmas_asym[:, 0, 1, 1]
+    
+    plt.figure(figsize=(8, 5))
+    plt.plot(mu_vals, sigma_sym_xxx, label=r'$\sigma^{L}_{xxx}$')
+    plt.plot(mu_vals, sigma_asym_xyy, label=r'$\sigma^{T}_{xyy}$')
+    plt.xlabel(r'$\mu$ (eV)')
+    plt.ylabel(r'$\sigma$')
+    # plt.ylim(-10, 10)
+    plt.title("QMD's Nonlinear Conductivity")
+    plt.legend()
+    
+    plot_path = figures_dir / "plot_scan_qmd.png"
+    # plt.savefig(plot_path)
+    # print(f"Plot saved to {plot_path}")
+    plt.show()
+
+if __name__ == "__main__":
+    plot_qmd()
