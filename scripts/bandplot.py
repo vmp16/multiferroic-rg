@@ -16,7 +16,7 @@ def plot_bands():
     kx = np.linspace(-config.K_LIM, config.K_LIM, k_pts)
     ky = np.zeros_like(kx)
 
-    fig, axes = plt.subplots(1, 2, figsize=(10, 6), sharex=True, sharey=True)
+    fig, axes = plt.subplots(1, 2, figsize=(7, 4), sharex=True, sharey=True)
     axes = np.atleast_1d(axes)
 
     spin_labels = ['up', 'dn']
@@ -49,21 +49,22 @@ def plot_bands():
             )
             ax.plot(
                 kx, energies[1]*1e3,
-                color=color, lw=1.5, ls='--',
+                color=color, lw=1.5,
             )
 
         ax.set_ylim(-25, 25)
-        ax.set_xlim(-0.15, 0.15)
+        ax.set_xlim(-0.12, 0.12)
         ax.set_xticks([-0.1, 0, 0.1])
         # ax.set_yticks([-0.1, 0.0, 0.1])
         ax.tick_params(axis='both', labelsize=17)
     axes[0].set_ylabel(r'Energy (meV)', fontsize=18)
 
+    # fig.text(0.53, 0.95, f'Delta={config.DELTA1UP} eV', ha='center', fontsize=18)
     fig.text(0.53, 0.03, r'$k_x a$', ha='left', fontsize=18)
     plt.tight_layout(rect=[0, 0.06, 1, 0.95])
 
     # Save the figure
-    output_path = project_root / 'figures' / 'energy_bands.png'
+    output_path = project_root / 'figures' / 'energy_bands_modif.png'
     plt.savefig(output_path, dpi=300)
     print(f"Plot saved to {output_path}")
     plt.show()

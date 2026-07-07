@@ -65,30 +65,60 @@ def velocity_element(system, px, py, idx1, idx2, axis):
     axis=1 for x, axis=0 for y.
     """
     # Get eigenstate components
-    psi1_x, psi1_y = system.get_eigenstate_components(px, py, idx1)
-    psi1_x = np.conj(psi1_x)
-    psi1_y = np.conj(psi1_y)
+    psi1_1, psi1_2 = system.get_eigenstate_components(px, py, idx1)
+    psi1_1 = np.conj(psi1_1)
+    psi1_2 = np.conj(psi1_2)
 
-    psi2_x, psi2_y = system.get_eigenstate_components(px, py, idx2)
+    psi2_1, psi2_2 = system.get_eigenstate_components(px, py, idx2)
 
     # Get Hamiltonian derivative components
     dh0 = system.derivate_h0_at_k(px, py, axis)
     dX = system.derivate_X_at_k(px, py, axis)
 
-    # Calculate <psi1 | v | psi2> = psi1* · (v · psi2)
+    # Calculate <psi1 | v | psi2> = psi1* . (v . psi2)
     # v = [[dh0, dX], [dX*, dh0]]
-    # res = psi1_x* (dh0*psi2_x + dX*psi2_y) + psi1_y* (dX**psi2_x + dh0*psi2_y)
+    # res = psi1_1* (dh0*psi2_1 + dX*psi2_2) + psi1_2* (dX**psi2_1 + dh0*psi2_2)
     
     # Intraband (idx1 == idx2) is real
     if idx1 == idx2:
         # <psi | v | psi> = dh0 * <psi|psi> + 2*Re(psi1* * dX * psi2)
         # since <psi|psi> = 1
-        res = dh0 + 2 * np.real(psi1_x * dX * psi2_y)
+        res = dh0 + 2 * np.real(psi1_1 * dX * psi2_2)
     else:
         # Interband (idx1 != idx2): <psi1 | psi2> = 0
-        # res = psi1_x* * dX * psi2_y + psi1_y* * dX* * psi2_x
-        res = psi1_x * dX * psi2_y + psi1_y * np.conj(dX) * psi2_x
+        # res = psi1_1* * dX * psi2_2 + psi1_2* * dX* * psi2_1
+        res = psi1_1 * dX * psi2_2 + psi1_2 * np.conj(dX) * psi2_1
 
+    return res
+
+def get_QG_tensor_component(system, band_idx, px, py, i, j):
+    """
+    Calculate a single component (i, j) of the Quantum Geometry Tensor.
+    i, j can be 0 (x) or 1 (y).
+    Note: i, j mapping to McCannCarts axis: 0 -> 1 (x), 1 -> 0 (y)
+    """
+    if band_idx not in (0, 1):
+        return None
+    n_idx = 1 - band_idx
+
+    e0, e1 = system.get_energy(px, py)
+    dE_sq = (e0 - e1) ** 2
+    del e0, e1
+
+    # Vi_bn = <band_idx | v_i | n_idx>
+    # Vj_bn = <band_idx | v_j | n_idx>
+    # T_ij = Vi_bn * Vj_bn* / dE^2
+    
+    ax_i = 1 if i == 0 else 0
+    ax_j = 1 if j == 0 else 0
+
+    Vi_bn = velocity_element(system, px, py, band_idx, n_idx, ax_i)
+    if i == j:
+        res = np.abs(Vi_bn)**2 / dE_sq
+    else:
+        Vj_bn = velocity_element(system, px, py, band_idx, n_idx, ax_j)
+        res = Vi_bn * np.conj(Vj_bn) / dE_sq
+    
     return res
 
 def get_quantum_metric_component(system, band_idx, px, py, i, j):
@@ -209,88 +239,3 @@ def get_dos(system, px, py, T, mu):
     total_dos = np.sum(-df_dE0 - df_dE1)
         
     return total_dos * prefactor
-
-def get_part_density(system, px, py, T, mu):
-    """
-    Calculate the particle density for the given flavor.
-    Returns: n [states / unit cell]
-    """
-    dk = px[0, 1] - px[0, 0]
-    prefactor = (dk**2) / (2 * np.pi)**2
-
-    E0, E1 = system.get_energy(px, py)
-
-    # Count electrons in the Conduction band
-    n_e = fermi_distrib(E0, mu, T)
-    # Count holes in the Valence band
-    n_h = 1.0 - fermi_distrib(E1, mu, T)
-
-    # Net density
-    n_total = np.sum(n_e - n_h)
-
-    return prefactor * n_total
-
-
-# -------- GET FUNCTIONS FOR CHUNK SPACE --------
-
-def get_QGT_chunk(system, band_idx, kx, ky):
-    """
-    Builds the 2x2 Quantum Geometry Tensor for a specific k-mesh chunk.
-    Returns: T_tensor of shape (2, 2, Ny_chunk, Nx).
-    """
-    n_idx = 1 - band_idx
-    e0, e1 = system.get_energy(kx, ky)
-    dE_sq = (e0 - e1) ** 2
-
-    # Get velocity elements for this chunk
-    vx_band = velocity_element(system, kx, ky, band_idx, n_idx, 0)
-    vy_band = velocity_element(system, kx, ky, band_idx, n_idx, 1)
-
-    # Build the 4D complex tensor just for this chunk
-    T_tensor = np.zeros((2, 2, *kx.shape), dtype=complex)
-
-    T_tensor[0, 0] = np.abs(vx_band)**2 / dE_sq
-    T_tensor[0, 1] = (vx_band * np.conj(vy_band)) / dE_sq
-    T_tensor[1, 0] = (vy_band * np.conj(vx_band)) / dE_sq
-    T_tensor[1, 1] = np.abs(vy_band)**2 / dE_sq
-
-    return T_tensor
-
-def get_qm_from_qgt(T_tensor):
-    """Extracts the Quantum Metric tensor (g) from the QGT"""
-    return np.real(T_tensor)
-
-def get_bc_from_qgt(T_tensor):
-    """Extracts the Berry Curvature tensor (Omega) from the QGT"""
-    return -2*np.imag(T_tensor)
-
-def get_G_tensor_from_qgt(T_tensor, e0, e1, band_idx):
-    """Extracts band normalized quantum metric tensor (G) from the QGT"""
-    dE = e0 - e1 if band_idx == 0 else e1 - e0
-    g_tensor = get_qm_from_qgt(T_tensor)
-    return 2 * g_tensor / dE
-
-def get_qmd_from_qgt(T_tensor, dk):
-    """
-    Calculates the Quantum Metric Dipole tensor by taking gradients of the QGT's real part.
-    """
-    g_tensor = get_qm_from_qgt(T_tensor)
-
-    # g_tensor has shape (2, 2, Ny_chunk, Nx)
-    dg_dky, dg_dkx = np.gradient(g_tensor, dk, axis=(2, 3))
-
-    qmd_tensor = np.zeros((2, 2, 2, *g_tensor.shape[2:]))
-    qmd_tensor[0] = dg_dkx
-    qmd_tensor[1] = dg_dky
-
-    return qmd_tensor
-
-def integrate_qmd_chunk(qmd_tensor_accumulated, band_E, mu_vals, T_eff, prefactor):
-    """
-    Integrates a precalculated, accumulated QMD chunk over the Fermi Surface.
-    """
-    # df_dE shape: (n_mu, Ny_chunk, Nx)
-    df_dE = deriv_fermi_distrib(band_E[None, :, :], mu_vals[:, None, None], T_eff)
-    
-    # Contract spatial indices and sum over the chunk
-    return np.einsum('abcjk, mjk -> mabc', qmd_tensor_accumulated, df_dE) * prefactor

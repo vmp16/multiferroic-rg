@@ -15,15 +15,15 @@ def plot_qmd():
     data = np.load(data_path)
     mu_vals = data['mu_vals']
     sigmas_sym = data['sigmas_sym']
-    sigmas_asym = data['sigmas_asym']
     
     # Select the pertinent components to plot
     sigma_sym_xxx = sigmas_sym[:, 0, 0, 0]
-    sigma_asym_xyy = sigmas_asym[:, 0, 1, 1]
+    sigma_sym_xyy = sigmas_sym[:, 0, 1, 1]
     
     plt.figure(figsize=(8, 5))
+    plt.axhline(0, linestyle=':', color='gray')
     plt.plot(mu_vals, sigma_sym_xxx, label=r'$\sigma^{L}_{xxx}$')
-    plt.plot(mu_vals, sigma_asym_xyy, label=r'$\sigma^{T}_{xyy}$')
+    plt.plot(mu_vals, sigma_sym_xyy, label=r'$\sigma^{L}_{xyy}$')
     plt.xlabel(r'$\mu$ (eV)')
     plt.ylabel(r'$\sigma$')
     # plt.ylim(-10, 10)

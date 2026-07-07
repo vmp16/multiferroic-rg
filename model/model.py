@@ -73,7 +73,7 @@ class McCannCarts:
             v4 = (np.sqrt(3) / 2) * self.gamma4
             p_mod_sq = px**2 + py**2
             h3c = (2 * v * v4 * p_mod_sq) / self.gamma1
-            h0_total = h0_total + h3c
+            h0_total = h0_total - h3c
 
         return h0_total
 
@@ -91,28 +91,28 @@ class McCannCarts:
     def get_eigenstate_components(self, px, py, band_idx):
         """
         Calculate the components of the eigenstate for a given band.
-        Returns (psi1, psi2)
+        Returns (psi_x, psi_y)
         """
         X = self.X_at_k(px, py)
         epsilon = np.sqrt(self.Delta ** 2 + np.abs(X) ** 2)
 
         if self.Delta >= 0:
             if band_idx == 0:
-                psi1, psi2 = self.Delta + epsilon, np.conj(X)
+                psi_x, psi_y = self.Delta + epsilon, np.conj(X)
             else:
-                psi1, psi2 = -X, self.Delta + epsilon
+                psi_x, psi_y = -X, self.Delta + epsilon
         else:
             if band_idx == 0:
-                psi1, psi2 = -X, self.Delta - epsilon
+                psi_x, psi_y = -X, self.Delta - epsilon
             else:
-                psi1, psi2 = self.Delta - epsilon, np.conj(X)
+                psi_x, psi_y = self.Delta - epsilon, np.conj(X)
 
         # Normalize
-        norm = np.sqrt(np.abs(psi1)**2 + np.abs(psi2)**2)
-        psi1 /= norm
-        psi2 /= norm
+        norm = np.sqrt(np.abs(psi_x)**2 + np.abs(psi_y)**2)
+        psi_x /= norm
+        psi_y /= norm
 
-        return psi1, psi2
+        return psi_x, psi_y
 
     def derivate_h0_at_k(self, px, py, axis):
         if self.gamma4 == 0:
@@ -121,10 +121,13 @@ class McCannCarts:
         v = (np.sqrt(3) / 2) * self.gamma0
         v4 = (np.sqrt(3) / 2) * self.gamma4
 
-        if axis == 1: # x
+        if axis == 0: # x
             return (4 * v * v4 * px) / self.gamma1
-        else: # y
+        elif axis == 1: # y
             return (4 * v * v4 * py) / self.gamma1
+        else:
+            print("Error: axis out of bounds")
+            return
 
     def derivate_X_at_k(self, px, py, axis):
         pi = self.valley_idx * px + 1j * py
@@ -137,9 +140,9 @@ class McCannCarts:
         # Isotropic term
         dX0_dpi = N * (v ** N ) * (pi / (-self.gamma1)) ** (N - 1)
 
-        if axis == 1:
+        if axis == 0:
             dX = self.valley_idx * dX0_dpi
-        else:
+        elif axis == 1:
             dX = 1j * dX0_dpi
 
         # v3 term
@@ -147,17 +150,17 @@ class McCannCarts:
             dX10_dpi = (((N - 1) * (N - 2)) / ((-self.gamma1) ** (N - 2))) * v ** (N - 2) * pi ** (N - 3) * v3 * pi_dag
             dX10_dpidag = ((N - 1) / ((-self.gamma1) ** (N - 2))) * (v * pi) ** (N - 2) * v3
 
-            if axis == 1:
+            if axis == 0:
                 dX += self.valley_idx * (dX10_dpi + dX10_dpidag)
-            else:
+            elif axis == 1:
                 dX += 1j * (dX10_dpi - dX10_dpidag)
 
         # gamma2 term
         if self.gamma2 != 0:
             dX01_dpi = (((N - 2) * (N - 3) * self.gamma2) / (2 * (-self.gamma1) ** (N - 3))) * v ** (N - 3) * pi ** (N - 4)
-            if axis == 1:
+            if axis == 0:
                 dX += self.valley_idx * dX01_dpi
-            else:
+            elif axis == 1:
                 dX += 1j * dX01_dpi
 
         return dX

@@ -9,7 +9,7 @@ project_root = Path(__file__).resolve().parent.parent
 sys.path.append(str(project_root))
 
 from model.model import McCannCarts
-from model.analysis import get_kmesh, deriv_fermi_distrib
+from model.analysis import deriv_fermi_distrib
 import model.config as config
 
 def calculate_total_dos(e_vals, chunk_size=1000):
@@ -66,16 +66,16 @@ def main():
     
     # Plotting
     plt.figure(figsize=(10, 6))
-    plt.plot(e_vals, dos_vals, color='navy', lw=2)
+    plt.plot(e_vals*1e3, dos_vals, color='navy', lw=2)
     
     # Mark expected peak positions from config.py
     # Flavor 1 & 4: +/- 0.1
     # Flavor 2 & 3: +/- 0.05
-    for peak in [-0.1, -0.05, 0.05, 0.1]:
-        plt.axvline(peak, color='green', linestyle=':', alpha=0.5, label='Expected Band Edge' if peak == 0.1 else "")
+    # for peak in [-0.1, -0.05, 0.05, 0.1]:
+    #     plt.axvline(peak, color='green', linestyle=':', alpha=0.5, label='Expected Band Edge' if peak == 0.1 else "")
 
     plt.axvline(0, color='gray', linestyle='--', alpha=0.5)
-    plt.xlabel('Energy (eV)', fontsize=16)
+    plt.xlabel('Energy (meV)', fontsize=16)
     plt.ylabel('Density of States (a. u.)', fontsize=16)
     # plt.title(f'Total Density of States (N={config.N} layers)', fontsize=16)
     # plt.legend()
