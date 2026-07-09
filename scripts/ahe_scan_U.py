@@ -8,15 +8,15 @@ project_root = Path(__file__).resolve().parent.parent
 sys.path.append(str(project_root))
 
 from model.model import McCannCarts
-from model.analysis import get_kmesh, get_ahe, fermi_distrib, get_Berry_curv
+from model.analysis import fermi_distrib, get_QGT_chunk, get_bc_from_qgt
 import model.config as config
 
-def scan_U(U_lim=0.2, n_U=50, chunk_size=1000):
+def scan_U(U_lim=0.02, n_U=50, chunk_size=1000):
     """
     Scan the total Anomalous Hall conductivity as a function of the external
     interlayer potential U using chunking and scalar pipeline.
     """
-    print(12*"=" + f" SCANNING TOTAL AHE VS U = [{-U_lim}, {U_lim}] (N_PTS={config.N_PTS}, T={config.T_real}K) " + 12*"=")
+    print(15*"=" + f" SCANNING TOTAL AHE VS U = [{-U_lim}, {U_lim}] (N_PTS={config.N_PTS}, T={config.T_real}K) " + 15*"=")
 
     U_vals = np.linspace(-U_lim, U_lim, n_U)
     kx_vals = np.linspace(-config.K_LIM, config.K_LIM, config.N_PTS)
@@ -26,22 +26,22 @@ def scan_U(U_lim=0.2, n_U=50, chunk_size=1000):
     sigmas_state1 = np.zeros(n_U)
     sigmas_state2 = np.zeros(n_U)
 
-    e0_dn_options = [config.E0_1DN, -config.E0_1DN]
+    e0_up_options = [config.E0_1UP, -config.E0_1UP]
     results = [sigmas_state1, sigmas_state2]
 
-    for state_idx, e0_dn in enumerate(e0_dn_options):
-        print(f"\nScanning Branch {state_idx+1} (E0_1DN = {e0_dn:.3f})...", flush=True)
+    for state_idx, e0_up in enumerate(e0_up_options):
+        print(f"\nScanning Branch {state_idx+1} (E0_1UP = {e0_up:.3f})...", flush=True)
         
         # Re-build E0_ARRAY for this state
-        e0_1up = config.E0_1UP
-        e0_1dn = e0_dn
-        e0_2up = -e0_dn
-        e0_2dn = e0_1up
+        e0_1up = e0_up
+        e0_1dn = config.E0_1DN
+        e0_2up = e0_1dn
+        e0_2dn = -e0_up
         local_e0_array = np.array([[e0_1up, e0_1dn],
                                    [e0_2up, e0_2dn]])
 
         for i, U_val in enumerate(U_vals):
-            print(f"Progress: {100 * (i + 1) / n_U:.1f}% (U={U_val:.4f})", flush=True)
+            print(f"\rProgress: {100 * (i + 1) / n_U:.1f}% (U={U_val:.4f})", end="", flush=True)
             
             total_sigma_xy = 0.0
             
@@ -66,7 +66,8 @@ def scan_U(U_lim=0.2, n_U=50, chunk_size=1000):
                         # Calculate energies and Berry curvature once
                         E0, E1 = system.get_energy(KX_c, KY_c)
                         # Omega_0 = -Omega_1
-                        Omega0 = get_Berry_curv(system, 0, KX_c, KY_c)
+                        T_chunk = get_QGT_chunk(system, 0, KX_c, KY_c)
+                        Omega0 = get_bc_from_qgt(T_chunk)
                         
                         # Integration prefactors
                         dk_c = KX_c[0, 1] - KX_c[0, 0]
@@ -110,7 +111,7 @@ def save_results(U_vals, sigmas_s1, sigmas_s2, filename="scan_ahe_vs_U.npz"):
     print(f"Results saved to {save_path}")
 
 def main():
-    U_vals, sigmas_s1, sigmas_s2 = scan_U(U_lim=0.17, n_U=100)
+    U_vals, sigmas_s1, sigmas_s2 = scan_U(U_lim=0.017, n_U=100)
     save_results(U_vals, sigmas_s1, sigmas_s2)
 
 if __name__ == "__main__":

@@ -1,6 +1,7 @@
 import sys
 import numpy as np
 import matplotlib.pyplot as plt
+from scipy.optimize import brentq
 from pathlib import Path
 import gc
 
@@ -9,145 +10,169 @@ project_root = Path(__file__).resolve().parent.parent
 sys.path.append(str(project_root))
 
 from model.model import McCannCarts
-from model.analysis import deriv_fermi_distrib, sym_decomp_cond
+from model.analysis import get_kmesh, fermi_distrib, get_QGT_chunk, get_qmd_from_qgt, integrate_qmd_chunk
 import model.config as config
 
-def get_optimized_qmd_sigma(system, KX, KY, dk, mu, T):
-    # 1. Energies and gap
-    E0, E1 = system.get_energy(KX, KY)
-    dE = E0 - E1
-    dE_sq = dE**2
-    
-    # 2. Eigenstates
-    psi0_1, psi0_2 = system.get_eigenstate_components(KX, KY, 0)
-    psi1_1, psi1_2 = system.get_eigenstate_components(KX, KY, 1)
-    
-    # 3. Hamiltonian derivatives
-    dh0_dx = system.derivate_h0_at_k(KX, KY, 1)
-    dh0_dy = system.derivate_h0_at_k(KX, KY, 0)
-    dX_dx = system.derivate_X_at_k(KX, KY, 1)
-    dX_dy = system.derivate_X_at_k(KX, KY, 0)
-    
-    # 4. Velocity elements <0|v_i|1>
-    v_x_01 = np.conj(psi0_1) * dX_dx * psi1_2 + np.conj(psi0_2) * np.conj(dX_dx) * psi1_1
-    v_y_01 = np.conj(psi0_1) * dX_dy * psi1_2 + np.conj(psi0_2) * np.conj(dX_dy) * psi1_1
-    
-    # 5. Metric components
-    g_xx = np.abs(v_x_01)**2 / dE_sq
-    g_yy = np.abs(v_y_01)**2 / dE_sq
-    g_xy = np.real(v_x_01 * np.conj(v_y_01)) / dE_sq
-    
-    # 6. Fermi derivatives
-    df_sum = deriv_fermi_distrib(E0, mu, T) + deriv_fermi_distrib(E1, mu, T)
-    
-    # 7. Integrals
-    sigma = np.zeros((2, 2, 2))
-    
-    # dg/dkx (axis 1), dg/dky (axis 0)
-    dgxx_dx = np.gradient(g_xx, dk, axis=1)
-    dgxx_dy = np.gradient(g_xx, dk, axis=0)
-    dgxy_dx = np.gradient(g_xy, dk, axis=1)
-    dgxy_dy = np.gradient(g_xy, dk, axis=0)
-    dgyy_dx = np.gradient(g_yy, dk, axis=1)
-    dgyy_dy = np.gradient(g_yy, dk, axis=0)
-    
-    sigma[0, 0, 0] = np.sum(df_sum * dgxx_dx) # xxx
-    sigma[1, 0, 0] = np.sum(df_sum * dgxx_dy) # yxx
-    
-    sigma[0, 0, 1] = np.sum(df_sum * dgxy_dx) # xxy
-    sigma[0, 1, 0] = sigma[0, 0, 1]
-    sigma[1, 0, 1] = np.sum(df_sum * dgxy_dy) # yxy
-    sigma[1, 1, 0] = sigma[1, 0, 1]
-    
-    sigma[0, 1, 1] = np.sum(df_sum * dgyy_dx) # xyy
-    sigma[1, 1, 1] = np.sum(df_sum * dgyy_dy) # yyy
-    
-    return sigma
+def find_mu_for_fixed_n(U_val, n_target, n_pts_light=600, mu_min=-0.1, mu_max=0.1):
+    # Build light kmesh
+    KX, KY = get_kmesh(config.K_LIM, n_pts_light)
+    dk = KX[0, 1] - KX[0, 0]
+    prefactor = (dk**2) / (2 * np.pi)**2
 
-def scan_qmd_vs_U(U_lim=0.1, n_U=50, chunk_size=1000):
-    print(12*"=" + f" SCANNING QMD VS U (mu={config.mu_eff}, T={config.T_real}K, N_PTS={config.N_PTS}) " + 12*"=")
-    U_vals = np.linspace(-U_lim, U_lim, n_U)
-    kx_vals = np.linspace(-config.K_LIM, config.K_LIM, config.N_PTS)
-    ky_vals = np.linspace(-config.K_LIM, config.K_LIM, config.N_PTS)
+    # Build system and precompute energies for this U value
+    all_flavs_bands = []
+    for v_idx, xi in enumerate(config.VALLEY_IDX):
+        for s_idx in range(2):
+            e0 = config.E0_ARRAY[v_idx, s_idx]
+            intrinsic_delta = config.DELTAS[v_idx, s_idx]
+            delta_eff = intrinsic_delta + U_val
+
+            system = McCannCarts(
+                N=config.N, valley_idx=xi, Delta=delta_eff,
+                gamma0=config.GAMMA0, gamma1=config.GAMMA1,
+                gamma2=config.GAMMA2, gamma3=config.GAMMA3,
+                gamma4=config.GAMMA4, E0=e0
+            )
+
+            # Get energies and sotre them
+            E0, E1 = system.get_energy(KX, KY)
+            all_flavs_bands.append((E0, E1))
+
+    # Root finder
+    def objective_function(mu):
+        n_flav = 0
+        for E0, E1 in all_flavs_bands:
+            n_e = fermi_distrib(E0, mu, config.T_eff)
+            n_h = 1.0 - fermi_distrib(E1, mu, config.T_eff)
+
+            n_flav += prefactor * np.sum(n_e - n_h)
+
+        n_total = n_flav / (config.a**2) * 1e16
+
+        return n_total - n_target
+
+    # Find the root -> mu
+    try:
+        mu_root = brentq(objective_function, mu_min, mu_max, xtol=1e-5)
+        return mu_root
+    except ValueError:
+        print(f"Error: The target density {n_target} is outside the bracket [{mu_min}, {mu_max}].")
+        raise
+
+def scan_U(U_vals, n_fixed, chunk_size=1000):
+    U_lim = U_vals[-1]
+    n_U = len(U_vals)
+    print(15*"=" + F" SCANNING QMD'S NLT FOR U = [{-U_lim}, {U_lim}] AND {n_U} POINTS " + 15*"=")
+
+    print(f"Resolving Fermi levels for constant particle density...")
+    mu_vals = []
+    for U in U_vals:
+        mu_at_U = find_mu_for_fixed_n(U, n_fixed)
+        mu_vals.append(mu_at_U)
+
+    print(f"\nRunning QMD Conductivity calculation...")
+
+    # Build the 1D k-arrays
+    n_pts = config.N_PTS
+    kx_vals = np.linspace(-config.K_LIM, config.K_LIM, n_pts)
+    ky_vals = np.linspace(-config.K_LIM, config.K_LIM, n_pts)
+
+    # Define integration prefactors
     dk = kx_vals[1] - kx_vals[0]
     prefactor = (dk**2) / (2 * np.pi)
 
-    e0_dn_options = [config.E0_1DN, -config.E0_1DN]
-    branch_results = [np.zeros((n_U, 2, 2, 2)), np.zeros((n_U, 2, 2, 2))]
+    # Initialize the total conductivity accumulator array
+    sigmas_total = np.zeros((len(U_vals), 2, 2, 2))
 
-    for b_idx, e0_dn in enumerate(e0_dn_options):
-        print(f"\nProcessing Branch {b_idx+1} (E0_1DN = {e0_dn:.3f})...")
-        e0_1up = config.E0_1UP
-        e0_1dn = e0_dn
-        e0_2up = -e0_dn
-        e0_2dn = e0_1up
-        local_e0_array = np.array([[e0_1up, e0_1dn],
-                                   [e0_2up, e0_2dn]])
+    for i, (U_val, mu_val) in enumerate(zip(U_vals, mu_vals)):
+        print(f"\rProgress: {100 * (i + 1) / n_U:.1f}% (U={U_val:.4f})", end="", flush=True)
 
-        for i, U_val in enumerate(U_vals):
-            print(f"Progress: {100 * (i + 1) / n_U:.1f}% (U={U_val:.4f})", flush=True)
-            sigma_total = np.zeros((2, 2, 2))
-            
-            for j_start in range(0, config.N_PTS, chunk_size):
-                j_end = min(j_start + chunk_size, config.N_PTS)
-                KX_c, KY_c = np.meshgrid(kx_vals, ky_vals[j_start:j_end])
+        for v_idx in range(2):
+            for s_idx in range(2):
+                xi = config.VALLEY_IDX[v_idx]
+                e0 = config.E0_ARRAY[v_idx, s_idx]
+                intrinsic_delta = config.DELTAS[v_idx, s_idx]
+                delta_eff = intrinsic_delta + U_val
                 
-                for v_idx in range(2):
-                    for s_idx in range(2):
-                        xi = config.VALLEY_IDX[v_idx]
-                        intrinsic_delta = config.DELTAS[v_idx, s_idx]
-                        e0 = local_e0_array[v_idx, s_idx]
-                        effective_delta = intrinsic_delta + U_val
-                        
-                        system = McCannCarts(
-                            N=config.N, valley_idx=xi, Delta=effective_delta,
-                            gamma0=config.GAMMA0, gamma1=config.GAMMA1,
-                            gamma2=config.GAMMA2, gamma3=config.GAMMA3,
-                            gamma4=config.GAMMA4, E0=e0
-                        )
-                        
-                        sigma_total += prefactor * get_optimized_qmd_sigma(system, KX_c, KY_c, dk, config.mu_eff, config.T_eff)
-                
-                gc.collect()
-            
-            sigma_sym, _ = sym_decomp_cond(sigma_total)
-            branch_results[b_idx][i] = sigma_sym
+                # print(f"\nInitializing system for Flavor: valley={xi}, spin={s_idx}...")
+                system = McCannCarts(
+                    N=config.N, valley_idx=xi, Delta=delta_eff,
+                    gamma0=config.GAMMA0, gamma1=config.GAMMA1,
+                    gamma2=config.GAMMA2, gamma3=config.GAMMA3,
+                    gamma4=config.GAMMA4, E0=e0
+                )
 
-    return U_vals, branch_results[0], branch_results[1]
+                # Inner Loop: Iterate over kmesh chunks along the y-axis
+                for j_start in range(0, config.N_PTS, chunk_size):
+                    j_end = min(j_start + chunk_size, config.N_PTS)
+                    # print(f"  Processing Chunk {j_start//chunk_size + 1}/{int(np.ceil(n_pts/chunk_size))}...", flush=True)
+                    
+                    # Define the chunked kmesh
+                    KX_c, KY_c = np.meshgrid(kx_vals, ky_vals[j_start:j_end])
 
-def main():
-    config.T_real = 4
-    config.T_eff = config.kB * config.T_real
-    config.N_PTS = 6000
-    config.mu_eff = -0.01
-    
-    U_lim = 0.1
-    n_U = 50
-    
-    U_vals, res1, res2 = scan_qmd_vs_U(U_lim=U_lim, n_U=n_U)
-    
+                    # Get energy bands
+                    E0, E1 = system.get_energy(KX_c, KY_c)
+                    band_energies = {0: E0, 1: E1}
+
+                    # 3. Process and integrate each band
+                    for band_idx in (0, 1):
+                        # Compute QGT and extract QMD for the given flavor, chunk and band
+                        T_chunk = get_QGT_chunk(system, band_idx, KX_c, KY_c)
+                        qmd_chunk = get_qmd_from_qgt(T_chunk, dk)
+
+                        # Accumulate directly into the total conductivity tensor
+                        sigmas_total[i] += integrate_qmd_chunk(
+                            qmd_chunk, 
+                            band_energies[band_idx], 
+                            np.array([mu_val]), 
+                            config.T_eff, 
+                            prefactor
+                        )[0]
+
+                        # Clear memory for this band's chunk calculation
+                        del T_chunk, qmd_chunk
+                    
+                    # Clean up chunk mesh and energies
+                    del KX_c, KY_c, E0, E1, band_energies
+                    gc.collect()
+
+    return sigmas_total
+
+def save_results(U_vals, sigmas_vals, n_fixed, filename="qmd_scan_U.npz"):
     data_dir = project_root / "data"
     data_dir.mkdir(exist_ok=True)
-    save_path = data_dir / "task2_qmd_scan_U.npz"
-    np.savez(save_path, U_vals=U_vals, sigma_branch1=res1, sigma_branch2=res2, 
-             mu=config.mu_eff, T=config.T_real, N_PTS=config.N_PTS)
+    
+    save_path = data_dir / filename
+    
+    # Metadata from config
+    metadata = {
+        "GAMMA0": config.GAMMA0,
+        "GAMMA1": config.GAMMA1,
+        "GAMMA2": config.GAMMA2,
+        "GAMMA3": config.GAMMA3,
+        "GAMMA4": config.GAMMA4,
+        "N": config.N,
+        "N_PTS": config.N_PTS,
+        "K_LIM": config.K_LIM,
+        "Temp": config.T_real,
+        "DELTAS": config.DELTAS,
+        "E0_ARRAY": config.E0_ARRAY,
+        "n_fixed": n_fixed
+    }
+    
+    np.savez(save_path, U_vals=U_vals, sigmas_vals=sigmas_vals, **metadata)
     print(f"Results saved to {save_path}")
-    
-    figures_dir = project_root / "figures"
-    figures_dir.mkdir(exist_ok=True)
-    
-    plt.figure(figsize=(10, 6))
-    plt.plot(U_vals, res1[:, 0, 0, 0], label=r'Branch 1 ($E_{0, 1dn} = 0.05$)', linewidth=2)
-    plt.plot(U_vals, res2[:, 0, 0, 0], label=r'Branch 2 ($E_{0, 1dn} = -0.05$)', linewidth=2)
-    plt.xlabel(r'Interlayer Potential $U$ (eV)', fontsize=14)
-    plt.ylabel(r'$\sigma_{xxx}$ (units)', fontsize=14)
-    plt.title(f'QMD Conductivity vs U (mu={config.mu_eff} eV, T={config.T_real} K)', fontsize=16)
-    plt.legend(fontsize=12)
-    plt.grid(True, alpha=0.3)
-    
-    plot_path = figures_dir / "task2_qmd_scan_U.png"
-    plt.savefig(plot_path, dpi=300)
-    print(f"Plot saved to {plot_path}")
+
+def main():
+    U_lim = 0.02        # eV
+    n_U = 300
+    U_vals = np.linspace(-U_lim, U_lim, n_U)
+
+    n_fixed = -3e11     # /cm^2
+
+    sigmas_total = scan_U(U_vals, n_fixed, chunk_size=1000)
+    save_results(U_vals, sigmas_total, n_fixed)
+
 
 if __name__ == "__main__":
     main()

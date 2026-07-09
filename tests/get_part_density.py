@@ -14,16 +14,16 @@ import model.config as config
 
 def calculate_total_part_dens(mu):
     """
-    Calculate the total particle density n_total per unit cell at a fixed Fermi level.
+    Calculate the total particle density n_total at a fixed Fermi level.
+    Returns: n_total (float), net particle density / cm^2
     """
 
-    print(f"Calculating total Particle Density at mu={mu*1e3} meV")
-
+    # Build the kmesh
     KX, KY = get_kmesh(config.K_LIM, config.N_PTS)    
     dk = KX[0, 1] - KX[0, 0]
 
+    # Calculate the particle density per flavor
     n_flav_list = []
-
     for v_idx, xi in enumerate(config.VALLEY_IDX):
         for s_idx in range(2):
             delta = config.DELTAS[v_idx, s_idx]
@@ -35,21 +35,21 @@ def calculate_total_part_dens(mu):
                 gamma4=config.GAMMA4, E0=e0
             )
 
+            # Get the particle density per unit cell
             n_flav = get_part_density(system, KX, KY, config.T_eff, mu)
             n_flav_list.append(n_flav)
 
-    n_total = np.sum(n_flav_list)
+    # Sum all the flavors and convert to /cm^2
+    n_total = np.sum(n_flav_list) / (config.a**2) * 1e16
 
     return n_total
 
 def main():
     mu = 0.0        # in eV
+    print(f"Calculating total Particle Density at mu={mu*1e3} meV")
     n_total = calculate_total_part_dens(mu)
-    print(f"   Net particle density for mu={mu*1e3} meV: {n_total:.5} / unit cell")
 
-    # Calculate the surfacic particle density
-    n_tot_surf = n_total / (config.a**2) * 1e16
-    print(f"   Net particle density for mu={mu*1e3} meV: {n_tot_surf:.5} / cm2")
+    print(f"   Net particle density for mu={mu*1e3} meV: {n_total:.5} / cm2")
 
 if __name__ == "__main__":
     main()

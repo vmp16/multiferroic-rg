@@ -9,7 +9,7 @@ project_root = Path(__file__).resolve().parent.parent
 sys.path.append(str(project_root))
 
 from model.model import McCannCarts
-from model.analysis import get_kmesh, get_QGT_chunk, get_qmd_from_qgt, integrate_qmd_chunk, sym_decomp_cond
+from model.analysis import get_QGT_chunk, get_qmd_from_qgt, integrate_qmd_chunk, sym_decomp_cond
 import model.config as config
 
 def scan_mu(mu_vals, chunk_size=1000):

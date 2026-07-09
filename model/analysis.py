@@ -59,6 +59,48 @@ def deriv_fermi_distrib(E, mu, T):
 
     return - (fermi_distrib(E, mu, T))**2 * np.exp(x_clipped) / T
 
+
+# ================ DOS & PARTICLE DENSITY ================
+
+def get_dos(system, px, py, T, mu):
+    """
+    Calculate the Density of States.
+    """
+    dk = px[0, 1] - px[0, 0]
+    prefactor = (dk**2) / (2 * np.pi)
+
+    E0, E1 = system.get_energy(px, py)
+    
+    df_dE0 = deriv_fermi_distrib(E0, mu, T)
+    df_dE1 = deriv_fermi_distrib(E1, mu, T)
+    
+    total_dos = np.sum(-df_dE0 - df_dE1)
+        
+    return total_dos * prefactor
+
+def get_part_density(system, px, py, T, mu):
+    """
+    Calculate the particle density for the given flavor.
+    Returns: n [states / unit cell]
+    """
+    dk = px[0, 1] - px[0, 0]
+    prefactor = (dk**2) / (2 * np.pi)**2
+
+    E0, E1 = system.get_energy(px, py)
+
+    # Count electrons in the Conduction band
+    n_e = fermi_distrib(E0, mu, T)
+    # Count holes in the Valence band
+    n_h = 1.0 - fermi_distrib(E1, mu, T)
+
+    # Net density
+    n_total = np.sum(n_e - n_h)
+
+    return prefactor * n_total
+
+
+# ================ WAVEFUNCTIONS PROPERTIES ================
+
 def velocity_element(system, px, py, idx1, idx2, axis):
     """
     Analytic scalar calculation of <psi1 | v_axis | psi2>.
@@ -194,42 +236,6 @@ def sym_decomp_cond(sigma):
 
     return sigma_sym, sigma_asym
 
-def get_dos(system, px, py, T, mu):
-    """
-    Calculate the Density of States.
-    """
-    dk = px[0, 1] - px[0, 0]
-    prefactor = (dk**2) / (2 * np.pi)
-
-    E0, E1 = system.get_energy(px, py)
-    
-    df_dE0 = deriv_fermi_distrib(E0, mu, T)
-    df_dE1 = deriv_fermi_distrib(E1, mu, T)
-    
-    total_dos = np.sum(-df_dE0 - df_dE1)
-        
-    return total_dos * prefactor
-
-def get_part_density(system, px, py, T, mu):
-    """
-    Calculate the particle density for the given flavor.
-    Returns: n [states / unit cell]
-    """
-    dk = px[0, 1] - px[0, 0]
-    prefactor = (dk**2) / (2 * np.pi)**2
-
-    E0, E1 = system.get_energy(px, py)
-
-    # Count electrons in the Conduction band
-    n_e = fermi_distrib(E0, mu, T)
-    # Count holes in the Valence band
-    n_h = 1.0 - fermi_distrib(E1, mu, T)
-
-    # Net density
-    n_total = np.sum(n_e - n_h)
-
-    return prefactor * n_total
-
 
 # -------- GET FUNCTIONS FOR CHUNK SPACE --------
 
@@ -261,8 +267,9 @@ def get_qm_from_qgt(T_tensor):
     return np.real(T_tensor)
 
 def get_bc_from_qgt(T_tensor):
-    """Extracts the Berry Curvature tensor (Omega) from the QGT"""
-    return -2*np.imag(T_tensor)
+    """Extracts the out-of-plane Berry Curvature (Omega) from the QGT"""
+    # Omega_tensor = -2*np.imag(T_tensor)
+    return (np.imag(T_tensor[1, 0]) - np.imag(T_tensor[0, 1]))
 
 def get_G_tensor_from_qgt(T_tensor, e0, e1, band_idx):
     """Extracts band normalized quantum metric tensor (G) from the QGT"""

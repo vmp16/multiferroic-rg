@@ -27,6 +27,10 @@ def plot_bands():
         ax.set_title(f"Valley {valley_name}", fontsize=16)
         ax.axhline(0, linestyle=':', color='gray', alpha=0.7)
 
+        mu_plot = 1.9927    # meV
+        if mu_plot != 0.0:
+            ax.axhline(mu_plot, linestyle='--', color='gray')
+
         for spin_idx, spin in enumerate(spin_labels):
             system = McCannCarts(
                 N=config.N,
