@@ -1,5 +1,6 @@
 figures/
 data/
+progress-report/
 __pycache__/
 *.log
 .DS_Store

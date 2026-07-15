@@ -132,14 +132,14 @@ def plot_flavors(mu_vals, contributions, labels):
     for i in range(4):
         axes[0].plot(mu_vals*1e3, contributions_xxx[:, i], label=labels[i])
     axes[0].set_xlabel(r'$\mu$ (meV)', fontsize=15)
-    axes[0].set_ylabel(r'$\sigma_{xxx}$ (Individual)', fontsize=15)
+    axes[0].set_ylabel(r'$\sigma_{xxx}$', fontsize=15)
     axes[0].tick_params(axis='both', labelsize=12)
     axes[0].legend(fontsize=12)
     
     # Right Panel: Symmetrized Total
     axes[1].plot(mu_vals*1e3, total_xxx_sym, color='black', linewidth=2, label='Total (Sym)')
     axes[1].set_xlabel(r'$\mu$ (meV)', fontsize=15)
-    axes[1].set_ylabel(r'$\sigma_{xxx}$ (Symmetrized Total)', fontsize=15)
+    axes[1].set_ylabel(r'$\sigma_{xxx}$ (Sym Total)', fontsize=15)
     axes[1].tick_params(axis='both', labelsize=12)
     axes[1].legend(fontsize=12)
     

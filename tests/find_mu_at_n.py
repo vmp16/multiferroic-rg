@@ -13,7 +13,7 @@ from model.model import McCannCarts
 from model.analysis import get_kmesh, fermi_distrib, get_part_density
 import model.config as config
 
-def precompute_energy_bands(KX, KY):
+def precompute_energy_bands(KX, KY, U=0.0):
     """
     Precomputes and stores energy bands for all 4 spin-valley flavors.
     """
@@ -21,7 +21,7 @@ def precompute_energy_bands(KX, KY):
 
     for v_idx, xi in enumerate(config.VALLEY_IDX):
         for s_idx in range(2):
-            delta = config.DELTAS[v_idx, s_idx]
+            delta = U + config.DELTAS[v_idx, s_idx]
             e0 = config.E0_ARRAY[v_idx, s_idx]
 
             system = McCannCarts(
@@ -37,7 +37,7 @@ def precompute_energy_bands(KX, KY):
 
     return all_bands
 
-def find_mu(n_target, mu_min=-0.2, mu_max=0.2):
+def find_mu(n_target, mu_min=-0.2, mu_max=0.2, U=0.0):
     """
     Finds the Fermi level mu (in eV) that yields the target particle density n_target.
     """
@@ -51,7 +51,7 @@ def find_mu(n_target, mu_min=-0.2, mu_max=0.2):
 
     # Precompute the energy bands for all flavors
     print("Precomputing energy bands for all flavors...")
-    all_flavs_bands = precompute_energy_bands(KX, KY)
+    all_flavs_bands = precompute_energy_bands(KX, KY, U=U)
 
     print("Bands ready. Starting root finder...")
 
@@ -85,8 +85,12 @@ def main():
     mu_min = -0.1
     mu_max = 0.1
 
-    mu_solved = find_mu(n_target, mu_min=mu_min, mu_max=mu_max)
+    # External Interlayer Potential
+    U = -0.0007          # eV
+
+    mu_solved = find_mu(n_target, mu_min=mu_min, mu_max=mu_max, U=U)
     print(f"\n   Target Density: {n_target:.4e} / cm2")
+    print(f"   Interlayer Potential U: {U*1e3} meV")
     print(f"   Calculated Fermi Level mu: {mu_solved * 1e3:.4f} meV")
 
 if __name__ == "__main__":

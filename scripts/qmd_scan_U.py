@@ -69,6 +69,7 @@ def scan_U(U_vals, n_fixed, chunk_size=1000):
     for U in U_vals:
         mu_at_U = find_mu_for_fixed_n(U, n_fixed)
         mu_vals.append(mu_at_U)
+    print("   Done")
 
     print(f"\nRunning QMD Conductivity calculation...")
 
@@ -136,9 +137,9 @@ def scan_U(U_vals, n_fixed, chunk_size=1000):
                     del KX_c, KY_c, E0, E1, band_energies
                     gc.collect()
 
-    return sigmas_total
+    return sigmas_total, mu_vals
 
-def save_results(U_vals, sigmas_vals, n_fixed, filename="qmd_scan_U.npz"):
+def save_results(U_vals, sigmas_vals, mu_vals, n_fixed, filename="qmd_scan_U.npz"):
     data_dir = project_root / "data"
     data_dir.mkdir(exist_ok=True)
     
@@ -160,8 +161,8 @@ def save_results(U_vals, sigmas_vals, n_fixed, filename="qmd_scan_U.npz"):
         "n_fixed": n_fixed
     }
     
-    np.savez(save_path, U_vals=U_vals, sigmas_vals=sigmas_vals, **metadata)
-    print(f"Results saved to {save_path}")
+    np.savez(save_path, U_vals=U_vals, sigmas_vals=sigmas_vals, mu_vals=mu_vals, **metadata)
+    print(f"\nResults saved to {save_path}")
 
 def main():
     U_lim = 0.02        # eV
@@ -170,8 +171,8 @@ def main():
 
     n_fixed = -3e11     # /cm^2
 
-    sigmas_total = scan_U(U_vals, n_fixed, chunk_size=1000)
-    save_results(U_vals, sigmas_total, n_fixed)
+    sigmas_total, mu_vals = scan_U(U_vals, n_fixed, chunk_size=1000)
+    save_results(U_vals, sigmas_total, mu_vals, n_fixed)
 
 
 if __name__ == "__main__":
