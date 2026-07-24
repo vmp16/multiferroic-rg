@@ -2,6 +2,7 @@ figures/
 data/
 progress-report/
 __pycache__/
+multiferroic_rg.egg-info/
 *.log
 .DS_Store
 .aider*

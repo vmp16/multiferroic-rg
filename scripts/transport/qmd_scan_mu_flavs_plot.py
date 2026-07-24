@@ -3,17 +3,12 @@ import numpy as np
 import matplotlib.pyplot as plt
 from pathlib import Path
 
-# Add project root to path
-project_root = Path(__file__).resolve().parent.parent
-sys.path.append(str(project_root))
-
 # Import plot_flavors from the calculation script
 from scripts.qmd_scan_mu_flavs import plot_flavors
 
 def load_qmd_flavors(filename='scan_nlt_qmd_flavors.npz'):
-    data_path = project_root / "data" / filename
-    figures_dir = project_root / "figures"
-    figures_dir.mkdir(exist_ok=True)
+    data_path = config.DATA_DIR / filename
+    config.FIGURES_DIR.mkdir(exist_ok=True)
     
     if not data_path.exists():
         print(f"Error: {data_path} not found. Run scan_nlt_qmd_flavors.py first.")

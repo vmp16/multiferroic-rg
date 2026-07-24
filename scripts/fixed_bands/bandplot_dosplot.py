@@ -3,10 +3,6 @@ import numpy as np
 import matplotlib.pyplot as plt
 from pathlib import Path
 
-# Add project root to path
-project_root = Path(__file__).resolve().parent.parent
-sys.path.append(str(project_root))
-
 from model.model import McCannCarts
 from model.analysis import get_kmesh, get_dos
 import model.config as config
@@ -103,9 +99,7 @@ def main():
     axs[2].tick_params(axis='both', labelsize=16)
     
     plt.tight_layout()
-    figures_dir = project_root / 'figures'
-    figures_dir.mkdir(exist_ok=True)
-    output_path = figures_dir / 'bands_dos_combined.png'
+    output_path = config.FIGURES_DIR / 'bands_dos_combined.png'
     plt.savefig(output_path, dpi=300)
     print(f"Plot saved to {output_path}")
     plt.show()

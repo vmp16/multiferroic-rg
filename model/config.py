@@ -1,15 +1,15 @@
 import numpy as np
+from pathlib import Path
+
+# Define data and figures paths
+PROJECT_ROOT = Path(__file__).resolve().parents[1]
+FIGURES_DIR = PROJECT_ROOT / 'figures'
+DATA_DIR = PROJECT_ROOT / 'data'
 
 # Lattice constant
 a = 2.46          # [Å]
 
 # Hopping parameters for ABC Graphene, in eV
-# GAMMA0 = 3.16
-# GAMMA1 = 0.39
-# GAMMA2 = -0.02
-# GAMMA3 = 0.315
-# GAMMA4 = 0.044
-
 # Values from Huang's Suppl. Mat.
 GAMMA0 = 3.16       # In-layer hopping
 GAMMA1 = 0.380      # Nearest-layer vertical hopping

@@ -2,10 +2,6 @@ import sys
 import numpy as np
 from pathlib import Path
 
-# Add project root to path
-project_root = Path(__file__).resolve().parent.parent
-sys.path.append(str(project_root))
-
 from scripts.ahe_scan_U import scan_U, save_results
 import model.config as config
 

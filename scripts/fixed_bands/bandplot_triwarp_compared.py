@@ -3,10 +3,6 @@ import numpy as np
 import matplotlib.pyplot as plt
 from pathlib import Path
 
-# Add project root to path
-project_root = Path(__file__).resolve().parent.parent
-sys.path.append(str(project_root))
-
 from model.model import McCannCarts
 import model.config as config
 
@@ -123,7 +119,7 @@ def plot_report_comparison():
     plt.tight_layout()
     
     # Save the figure
-    output_path = project_root / 'figures' / 'report_trigonal_comparison.png'
+    output_path = config.FIGURES_DIR / 'report_trigonal_comparison.png'
     plt.savefig(output_path, dpi=300)
     print(f"Report figure saved to {output_path}")
     plt.show()

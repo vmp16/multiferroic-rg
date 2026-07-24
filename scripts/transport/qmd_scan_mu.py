@@ -4,10 +4,6 @@ from pathlib import Path
 import matplotlib.pyplot as plt
 import gc
 
-# Add project root to path
-project_root = Path(__file__).resolve().parent.parent
-sys.path.append(str(project_root))
-
 from model.model import McCannCarts
 from model.analysis import get_QGT_chunk, get_qmd_from_qgt, integrate_qmd_chunk, sym_decomp_cond
 import model.config as config
@@ -80,10 +76,9 @@ def scan_mu(mu_vals, chunk_size=1000):
     return sigmas_total
 
 def save_results(mu_vals, sigmas_sym, filename="scan_nlt_qmd.npz"):
-    data_dir = project_root / "data"
-    data_dir.mkdir(exist_ok=True)
+    config.DATA_DIR.mkdir(exist_ok=True)
     
-    save_path = data_dir / filename
+    save_path = config.DATA_DIR / filename
     
     # Metadata from config
     metadata = {
@@ -104,8 +99,7 @@ def save_results(mu_vals, sigmas_sym, filename="scan_nlt_qmd.npz"):
     print(f"Results saved to {save_path}")
 
 def plot_results(mu_vals, sigma_tensor):
-    figures_dir = project_root / "figures"
-    figures_dir.mkdir(exist_ok=True)
+    config.FIGURES_DIR.mkdir(exist_ok=True)
     
     plt.figure(figsize=(10, 6))
     
@@ -122,7 +116,7 @@ def plot_results(mu_vals, sigma_tensor):
     plt.title("QMD's Nonlinear Conductivity Scan")
     plt.legend()
     plt.grid(True)
-    plot_path = figures_dir / "scan_nlt_qmd.png"
+    plot_path = config.FIGURES_DIR / "scan_nlt_qmd.png"
     plt.savefig(plot_path)
     print(f"Plot saved to {plot_path}")
 

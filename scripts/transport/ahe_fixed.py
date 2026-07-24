@@ -2,10 +2,6 @@ import numpy as np
 import sys
 from pathlib import Path
 
-# Add project root to path to allow imports from model/
-project_root = Path(__file__).resolve().parent.parent
-sys.path.append(str(project_root))
-
 from model.model import McCannCarts
 from model.analysis import get_kmesh, get_ahe
 import model.config as config

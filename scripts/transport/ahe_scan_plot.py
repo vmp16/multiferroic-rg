@@ -3,10 +3,6 @@ import matplotlib.pyplot as plt
 from pathlib import Path
 import sys
 
-# Add project root to path
-project_root = Path(__file__).resolve().parent.parent
-sys.path.append(str(project_root))
-
 # Set math font to Computer Modern to properly render \varepsilon
 plt.rcParams['mathtext.fontset'] = 'cm'
 
@@ -14,7 +10,7 @@ def plot_ahe_vs_U(filename="scan_ahe_vs_U.npz"):
     """
     Load and plot the Anomalous Hall conductivity vs Interlayer Potential U.
     """
-    data_path = project_root / "data" / filename
+    data_path = config.DATA_DIR / filename
     if not data_path.exists():
         print(f"Error: Data file {data_path} not found. Run the scan script first.")
         return
@@ -48,10 +44,9 @@ def plot_ahe_vs_U(filename="scan_ahe_vs_U.npz"):
     plt.tight_layout()
 
     # Save figure
-    figures_dir = project_root / "figures"
-    figures_dir.mkdir(exist_ok=True)
+    config.FIGURES_DIR.mkdir(exist_ok=True)
     plot_filename = f"plot_{Path(filename).stem}.png"
-    plot_path = figures_dir / plot_filename
+    plot_path = config.FIGURES_DIR / plot_filename
     plt.savefig(plot_path, dpi=300, bbox_inches='tight')
     
     print(f"   Plot saved to: {plot_path}")

@@ -3,10 +3,8 @@ import matplotlib.pyplot as plt
 from pathlib import Path
 
 def plot_holder():
-    project_root = Path(__file__).resolve().parent.parent
-    data_path = project_root / "data" / "scan_nlt_holder_tw_large.npz"
-    figures_dir = project_root / "figures"
-    figures_dir.mkdir(exist_ok=True)
+    data_path = config.DATA_DIR / "scan_nlt_holder_tw_large.npz"
+    config.FIGURES_DIR.mkdir(exist_ok=True)
     
     if not data_path.exists():
         print(f"Error: {data_path} not found. Run scan_nlt_holder.py first.")
@@ -30,7 +28,7 @@ def plot_holder():
     plt.title("Holder's Nonlinear Conductivity")
     plt.legend()
     
-    plot_path = figures_dir / "plot_scan_holder.png"
+    plot_path = config.FIGURES_DIR / "plot_scan_holder.png"
     # plt.savefig(plot_path)
     # print(f"Plot saved to {plot_path}")
     plt.show()

@@ -3,16 +3,12 @@ import numpy as np
 from pathlib import Path
 import matplotlib.pyplot as plt
 
-# Add project root to path
-project_root = Path(__file__).resolve().parent.parent
-sys.path.append(str(project_root))
-
 from model.model import McCannCarts
 from model.analysis import get_kmesh, get_G_tensor, velocity_element, deriv_fermi_distrib, sym_decomp_cond
 import model.config as config
 
 def scan_mu(mu_lim=0.3, n_mu=100):
-    print(12*"=" + F" SCANNING HOLDER'S NLT FOR MU = [{-mu_lim}, {mu_lim}] AND {n_mu} POINTS " + 12*"=")
+    print(12*"=" + F" SCANNING GAO'S NLT FOR MU = [{-mu_lim}, {mu_lim}] AND {n_mu} POINTS " + 12*"=")
     mu_vals = np.linspace(-mu_lim, mu_lim, n_mu)
 
     # Build the kmesh
@@ -22,8 +18,8 @@ def scan_mu(mu_lim=0.3, n_mu=100):
     dk = KX[0, 1] - KX[0, 0]
     prefactor = (dk**2) / (2 * np.pi)
 
-    # Pre-calculate Holder tensors for each flavor (2 valleys * 2 spins) and 2 bands
-    print(f"Pre-calculating Holder tensors for all flavors (N_PTS={n_pts})...")
+    # Pre-calculate Gao tensors for each flavor (2 valleys * 2 spins) and 2 bands
+    print(f"Pre-calculating Gao tensors for all flavors (N_PTS={n_pts})...")
     flavor_tensors = [] # List of list of (T_tensor, energy)
 
     for v_idx, xi in enumerate(config.VALLEY_IDX):
@@ -45,11 +41,11 @@ def scan_mu(mu_lim=0.3, n_mu=100):
                 Vx, Vy = velocity_element(system, p, band_idx, band_idx)
                 V_vector = np.array([Vx, Vy])
                 
-                # Holder's formula integrand
+                # Gao's formula integrand
                 term1 = np.einsum('i..., jl... -> ijl...', V_vector, G_tensor)
-                term2 = np.einsum('j..., li... -> ijl...', V_vector, G_tensor)
-                term3 = np.einsum('l..., ji... -> ijl...', V_vector, G_tensor)
-                T_tensor = 2 * term1 - (term2 + term3) / 2
+                term2 = np.einsum('j..., il... -> ijl...', V_vector, G_tensor)
+                term3 = np.einsum('l..., ij... -> ijl...', V_vector, G_tensor)
+                T_tensor = term1 - (term2 + term3) / 2
                 
                 band_info.append((T_tensor, energies[band_idx]))
             flavor_tensors.append(band_info)
@@ -77,11 +73,10 @@ def scan_mu(mu_lim=0.3, n_mu=100):
     print("\nScan completed.")
     return mu_vals, np.array(sigmas_sym), np.array(sigmas_asym)
 
-def save_results(mu_vals, sigmas_sym, sigmas_asym, filename="scan_nlt_holder.npz"):
-    data_dir = project_root / "data"
-    data_dir.mkdir(exist_ok=True)
+def save_results(mu_vals, sigmas_sym, sigmas_asym, filename="scan_nlt_gao.npz"):
+    config.DATA_DIR.mkdir(exist_ok=True)
     
-    save_path = data_dir / filename
+    save_path = config.DATA_DIR / filename
     
     # Metadata from config
     metadata = {
@@ -102,8 +97,7 @@ def save_results(mu_vals, sigmas_sym, sigmas_asym, filename="scan_nlt_holder.npz
     print(f"Results saved to {save_path}")
 
 def plot_results(mu_vals, sigma_tensor):
-    figures_dir = project_root / "figures"
-    figures_dir.mkdir(exist_ok=True)
+    config.FIGURES_DIR.mkdir(exist_ok=True)
     
     plt.figure(figsize=(10, 6))
     
@@ -117,15 +111,16 @@ def plot_results(mu_vals, sigma_tensor):
     
     plt.xlabel(r'$\mu$ (eV)')
     plt.ylabel(r'$\sigma$ (units)')
-    plt.title("Holder's Nonlinear Conductivity Scan")
+    plt.title("Gao's Nonlinear Conductivity Scan")
     plt.legend()
     plt.grid(True)
-    plot_path = figures_dir / "scan_nlt_holder.png"
+
+    plot_path = config.FIGURES_DIR / "scan_nlt_gao.png"
     plt.savefig(plot_path)
     print(f"Plot saved to {plot_path}")
 
 def main():
-    mu_vals, sigmas_sym, sigmas_asym = scan_mu(mu_lim=0.5, n_mu=500)
+    mu_vals, sigmas_sym, sigmas_asym = scan_mu(mu_lim=0.2, n_mu=400)
     save_results(mu_vals, sigmas_sym, sigmas_asym)
     # plot_results(mu_vals, sigma_tensors)
 

@@ -5,10 +5,6 @@ from scipy.optimize import brentq
 from pathlib import Path
 import gc
 
-# Add project root to path
-project_root = Path(__file__).resolve().parent.parent
-sys.path.append(str(project_root))
-
 from model.model import McCannCarts
 from model.analysis import get_kmesh, fermi_distrib, get_QGT_chunk, get_qmd_from_qgt, integrate_qmd_chunk
 import model.config as config
@@ -140,10 +136,9 @@ def scan_U(U_vals, n_fixed, chunk_size=1000):
     return sigmas_total, mu_vals
 
 def save_results(U_vals, sigmas_vals, mu_vals, n_fixed, filename="qmd_scan_U.npz"):
-    data_dir = project_root / "data"
-    data_dir.mkdir(exist_ok=True)
+    config.DATA_DIR.mkdir(exist_ok=True)
     
-    save_path = data_dir / filename
+    save_path = config.DATA_DIR / filename
     
     # Metadata from config
     metadata = {

@@ -4,10 +4,6 @@ import matplotlib.pyplot as plt
 from pathlib import Path
 import gc
 
-# Add project root to path
-project_root = Path(__file__).resolve().parent.parent
-sys.path.append(str(project_root))
-
 from model.model import McCannCarts
 from model.analysis import deriv_fermi_distrib, sym_decomp_cond
 import model.config as config
@@ -129,16 +125,14 @@ def main():
     res2 = calculate_qmd_mu_scan(mu_vals, -0.05, n_pts=config.N_PTS)
     
     # Save
-    data_dir = project_root / "data"
-    data_dir.mkdir(exist_ok=True)
-    save_path = data_dir / "task3_qmd_mu_scan.npz"
+    config.DATA_DIR.mkdir(exist_ok=True)
+    save_path = config.DATA_DIR / "task3_qmd_mu_scan.npz"
     np.savez(save_path, mu_vals=mu_vals, sigma_branch1=res1, sigma_branch2=res2, 
              T=config.T_real, N_PTS=config.N_PTS)
     print(f"Results saved to {save_path}")
     
     # Plot xxx component
-    figures_dir = project_root / "figures"
-    figures_dir.mkdir(exist_ok=True)
+    config.FIGURES_DIR.mkdir(exist_ok=True)
     
     plt.figure(figsize=(10, 6))
     plt.plot(mu_vals, res1[:, 0, 0, 0], label=r'$E_{0, 1dn} = 0.05$ eV', linewidth=2)
@@ -149,7 +143,7 @@ def main():
     plt.legend(fontsize=12)
     plt.grid(True, alpha=0.3)
     
-    plot_path = figures_dir / "task3_qmd_mu_scan.png"
+    plot_path = config.FIGURES_DIR / "task3_qmd_mu_scan.png"
     plt.savefig(plot_path, dpi=300)
     print(f"Plot saved to {plot_path}")
     plt.show()

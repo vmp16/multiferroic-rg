@@ -85,18 +85,12 @@ def main():
     plt.tick_params(axis='x', labelsize=15)
     plt.yticks([])
     
-    # Create figures directory if it doesn't exist
-    figures_dir = project_root / 'figures'
-    figures_dir.mkdir(exist_ok=True)
-    
-    output_path = figures_dir / 'dos_plot.png'
+    output_path = config.FIGURES_DIR / 'dos_plot.png'
     plt.savefig(output_path, dpi=300)
     print(f"Plot saved to {output_path}")
     
     # Also save data for future use
-    data_dir = project_root / 'data'
-    data_dir.mkdir(exist_ok=True)
-    np.savez(data_dir / 'dos_data.npz', e_vals=e_vals, dos_vals=dos_vals)
+    np.savez(config.DATA_DIR / 'dos_data.npz', e_vals=e_vals, dos_vals=dos_vals)
     print(f"Data saved to {data_dir / 'dos_data.npz'}")
 
 if __name__ == "__main__":

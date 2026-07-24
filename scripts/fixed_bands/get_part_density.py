@@ -4,10 +4,6 @@ import matplotlib.pyplot as plt
 from pathlib import Path
 import gc
 
-# Add project root to path
-project_root = Path(__file__).resolve().parent.parent
-sys.path.append(str(project_root))
-
 from model.model import McCannCarts
 from model.analysis import get_kmesh, get_part_density
 import model.config as config
@@ -45,8 +41,8 @@ def calculate_total_part_dens(mu, U=0.0):
     return n_total
 
 def main():
-    mu = -0.00538        # in eV
-    U = -0.02
+    mu = 0.0        # in eV
+    U = 0.0
     print(f"Calculating total Particle Density at mu={mu*1e3} meV, U={U*1e3} meV...")
     n_total = calculate_total_part_dens(mu, U=U)
 

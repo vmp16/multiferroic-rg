@@ -5,10 +5,6 @@ from pathlib import Path
 from scipy.optimize import brentq
 import gc
 
-# Add project root to path
-project_root = Path(__file__).resolve().parent.parent
-sys.path.append(str(project_root))
-
 from model.model import McCannCarts
 from model.analysis import get_kmesh, fermi_distrib, get_part_density
 import model.config as config
@@ -86,7 +82,7 @@ def main():
     mu_max = 0.1
 
     # External Interlayer Potential
-    U = -0.0007          # eV
+    U = 0.0          # eV
 
     mu_solved = find_mu(n_target, mu_min=mu_min, mu_max=mu_max, U=U)
     print(f"\n   Target Density: {n_target:.4e} / cm2")

@@ -32,13 +32,17 @@ To capture the self-consistent polarization and gap state changes, the model inc
   * [`analysis.py`](file:///home/martinpv/DIPC/multiferroic-rg/model/analysis.py): Implements functions to calculate the Fermi distribution, velocity matrix elements, Berry curvature, Quantum Metric Tensor, Quantum Metric Dipole (QMD), linear AHE conductivity, and density of states (DOS).
   * [`config.py`](file:///home/martinpv/DIPC/multiferroic-rg/model/config.py): Global parameters (hoppings, temperature, valley indices, spin-valley gap splits, and onsite energy offsets).
 
-* **`scripts/`**: Run scripts for sweeps and visualizations.
-  * **AHE & Hysteresis**:
+* **`scripts/`**: Scripts for sweeps and visualizations.
+  * **`fixed_bands/`**: Building of the band structure with manually determined energy gaps and shifts to reproduce Huang's bands. Extracting the DOS and calculating the charge carrier density at a given Fermi level and vice-versa.
+  * **`correlations/`**: Performing mean-field calculations to characterize the effect of electronic correlations, giving the values of the energy gaps and shifts.
+  * **`transport/`**: Calculates different relevant transport signatures of the system, including the linear Anomalous Hall Effect butterfly hysteresis [`ahe_scan_U.py`] and the QMD's non-linear conductivity [`qmd_scan_mu.py`].
+
+  <!-- * **AHE & Hysteresis**:
     * [`ahe_scan_U.py`](file:///home/martinpv/DIPC/multiferroic-rg/scripts/ahe_scan_U.py) / [`ahe_scan_plot.py`](file:///home/martinpv/DIPC/multiferroic-rg/scripts/ahe_scan_plot.py): Simulates and plots the AHE butterfly hysteresis loops by scanning the interlayer potential $U$.
   * **QMD & Nonlinear Conductivity**:
     * [`qmd_scan_U.py`](file:///home/martinpv/DIPC/multiferroic-rg/scripts/qmd_scan_U.py) / [`qmd_scan_mu.py`](file:///home/martinpv/DIPC/multiferroic-rg/scripts/qmd_scan_mu.py): Scans QMD conductivity tensor elements as a function of $U$ or chemical potential $\mu$.
   * **Bands & DOS**:
-    * [`bandplot.py`](file:///home/martinpv/DIPC/multiferroic-rg/scripts/bandplot.py) / [`dos_plot.py`](file:///home/martinpv/DIPC/multiferroic-rg/scripts/dos_plot.py): Plots dispersion relation surfaces and density of states.
+    * [`bandplot.py`](file:///home/martinpv/DIPC/multiferroic-rg/scripts/bandplot.py) / [`dos_plot.py`](file:///home/martinpv/DIPC/multiferroic-rg/scripts/dos_plot.py): Plots dispersion relation surfaces and density of states. -->
 
 * **`tests/`**: Unit tests, shape verifications, and parameter debugging scripts.
 * **`figures/`**: Generated plots for AHE butterfly hysteresis, DOS, energy bands, and QMD sweeps.

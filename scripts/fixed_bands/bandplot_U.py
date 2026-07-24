@@ -3,10 +3,6 @@ import numpy as np
 import matplotlib.pyplot as plt
 from pathlib import Path
 
-# Add project root to path
-project_root = Path(__file__).resolve().parent.parent
-sys.path.append(str(project_root))
-
 from model.model import McCannCarts
 import model.config as config
 
@@ -70,7 +66,7 @@ def plot_bands(mu_plot = 0.0, U=0.0):
     plt.tight_layout(rect=[0, 0.06, 1, 0.95])
 
     # Save the figure
-    output_path = project_root / 'figures' / f'bandstructure_U{U}.png'
+    output_path = config.FIGURES_DIR / f'bandstructure_U{U}.png'
     plt.savefig(output_path, dpi=300)
     print(f"Plot saved to {output_path}")
     plt.show()

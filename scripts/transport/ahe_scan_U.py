@@ -3,10 +3,6 @@ import numpy as np
 from pathlib import Path
 import gc
 
-# Add project root to path
-project_root = Path(__file__).resolve().parent.parent
-sys.path.append(str(project_root))
-
 from model.model import McCannCarts
 from model.analysis import fermi_distrib, get_QGT_chunk, get_bc_from_qgt
 import model.config as config
@@ -94,8 +90,7 @@ def scan_U(U_lim=0.02, n_U=50, chunk_size=1000):
 
 
 def save_results(U_vals, sigmas_s1, sigmas_s2, filename="scan_ahe_vs_U.npz"):
-    data_dir = project_root / "data"
-    data_dir.mkdir(exist_ok=True)
+    config.DATA_DIR.mkdir(exist_ok=True)
     
     save_path = data_dir / filename
     

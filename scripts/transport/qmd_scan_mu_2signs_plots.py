@@ -3,17 +3,13 @@ import numpy as np
 import matplotlib.pyplot as plt
 from pathlib import Path
 
-# Add project root to path
-project_root = Path(__file__).resolve().parent.parent
-sys.path.append(str(project_root))
-
 # Set math font to Computer Modern to properly render \varepsilon
 plt.rcParams['mathtext.fontset'] = 'cm'
 
 
 def load_task3_data(filename="task3_qmd_mu_scan.npz"):
     """Load the task 3 QMD scan data from the NPZ file."""
-    data_path = project_root / "data" / filename
+    data_path = config.DATA_DIR / filename
 
     if not data_path.exists():
         print(f"Error: Data file not found at {data_path}")
@@ -36,11 +32,10 @@ def build_task3_plot(task3_data, output_path=None):
     if task3_data is None:
         return None
 
-    figures_dir = project_root / "figures"
-    figures_dir.mkdir(exist_ok=True)
+    config.FIGURES_DIR.mkdir(exist_ok=True)
 
     if output_path is None:
-        output_path = figures_dir / "task3_qmd_mu_scan_replot.png"
+        output_path = config.FIGURES_DIR / "task3_qmd_mu_scan_replot.png"
 
     mu_vals = task3_data["mu_vals"]
     res1 = task3_data["sigma_branch1"]
@@ -72,7 +67,7 @@ def build_task3_plot(task3_data, output_path=None):
 
 
 def replot_task3():
-    data_path = project_root / "data" / "task3_qmd_mu_scan.npz"
+    data_path = config.DATA_DIR / "task3_qmd_mu_scan.npz"
     task3_data = load_task3_data(data_path)
     if task3_data is None:
         return

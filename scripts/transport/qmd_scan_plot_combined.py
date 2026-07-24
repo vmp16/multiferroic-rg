@@ -3,10 +3,6 @@ import numpy as np
 import matplotlib.pyplot as plt
 from pathlib import Path
 
-# Add project root to path
-project_root = Path(__file__).resolve().parent.parent
-sys.path.append(str(project_root))
-
 from qmd_scan_mu_flavs_plot import load_qmd_flavors
 from plot_task3_results import load_task3_data
 
@@ -14,9 +10,8 @@ from plot_task3_results import load_task3_data
 plt.rcParams['mathtext.fontset'] = 'cm'
 
 def main():
-    figures_dir = project_root / "figures"
-    figures_dir.mkdir(exist_ok=True)
-    output_path = figures_dir / "combined_qmd.png"
+    config.FIGURES_DIR.mkdir(exist_ok=True)
+    output_path = config.FIGURES_DIR / "combined_qmd.png"
 
     # Load the data
     mu_vals_contribs, contribs, _ = load_qmd_flavors(filename="scan_nlt_qmd_flavors.npz")

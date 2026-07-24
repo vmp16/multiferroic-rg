@@ -4,10 +4,6 @@ from pathlib import Path
 import matplotlib.pyplot as plt
 import gc
 
-# Add project root to path
-project_root = Path(__file__).resolve().parent.parent
-sys.path.append(str(project_root))
-
 from model.model import McCannCarts
 from model.analysis import get_kmesh, get_QGT_chunk, get_qmd_from_qgt, integrate_qmd_chunk, sym_decomp_cond
 import model.config as config
@@ -88,9 +84,8 @@ def scan_mu_flavors(mu_vals, chunk_size=1000):
 
 
 def save_results(mu_vals, contributions, labels, filename="scan_nlt_qmd_flavors.npz"):
-    data_dir = project_root / "data"
-    data_dir.mkdir(exist_ok=True)
-    save_path = data_dir / filename
+    config.DATA_DIR.mkdir(exist_ok=True)
+    save_path = config.DATA_DIR / filename
     
     metadata = {
         "GAMMA0": config.GAMMA0,
@@ -111,8 +106,7 @@ def save_results(mu_vals, contributions, labels, filename="scan_nlt_qmd_flavors.
 
 
 def plot_flavors(mu_vals, contributions, labels):
-    figures_dir = project_root / "figures"
-    figures_dir.mkdir(exist_ok=True)
+    config.FIGURES_DIR.mkdir(exist_ok=True)
     
     # Extract xxx component for all flavors: shape (n_mu, 4)
     contributions_xxx = contributions[:, :, 0, 0, 0]
@@ -144,7 +138,7 @@ def plot_flavors(mu_vals, contributions, labels):
     axes[1].legend(fontsize=12)
     
     plt.tight_layout()
-    plot_path = figures_dir / f"scan_nlt_qmd_flavs_delta{config.DELTA1UP}.png"
+    plot_path = config.FIGURES_DIR / f"scan_nlt_qmd_flavs_delta{config.DELTA1UP}.png"
     plt.savefig(plot_path, dpi=300)
     print(f"Plot saved to {plot_path}")
     plt.show()

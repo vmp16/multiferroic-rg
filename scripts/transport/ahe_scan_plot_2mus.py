@@ -3,10 +3,6 @@ import matplotlib.pyplot as plt
 from pathlib import Path
 import sys
 
-# Add project root to path
-project_root = Path(__file__).resolve().parent.parent
-sys.path.append(str(project_root))
-
 # Set math font to Computer Modern to properly render \varepsilon
 plt.rcParams['mathtext.fontset'] = 'cm'
 
@@ -19,7 +15,7 @@ def plot_combined_scans(files_list):
     fig, axs = plt.subplots(1, n_scans, figsize=(7*n_scans, 6), sharex=True, sharey=True)
 
     for i, filename in enumerate(files_list):
-        data_path = project_root / "data" / filename
+        data_path = config.DATA_DIR / filename
         if not data_path.exists():
             print(f"Error: Data file {data_path} not found. Run the scan script first.")
             return
@@ -60,10 +56,9 @@ def plot_combined_scans(files_list):
     plt.tight_layout()
 
     # Save figure
-    figures_dir = project_root / "figures"
-    figures_dir.mkdir(exist_ok=True)
+    config.DATA_DIR.mkdir(exist_ok=True)
     plot_filename = "plot_combined_scans_ahe.png"
-    plot_path = figures_dir / plot_filename
+    plot_path = config.DATA_DIR / plot_filename
     plt.savefig(plot_path, dpi=300, bbox_inches='tight')
     
     print(f"Success! Plot saved to: {plot_path}")
