@@ -41,7 +41,7 @@ def calculate_total_part_dens(mu, U=0.0):
     return n_total
 
 def main():
-    mu = 0.0        # in eV
+    mu = -0.0006052        # in eV
     U = 0.0
     print(f"Calculating total Particle Density at mu={mu*1e3} meV, U={U*1e3} meV...")
     n_total = calculate_total_part_dens(mu, U=U)

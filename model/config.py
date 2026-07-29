@@ -42,10 +42,14 @@ DELTA2DN = DELTA1UP
 DELTAS = np.array([[DELTA1UP, DELTA1DN],
                    [DELTA2UP, DELTA2DN]])
 
-# On-site energies
+# On-site energies [eV]
 E0_1UP = 0.005
 E0_1DN = 0.0
 E0_2UP = E0_1DN
 E0_2DN = -E0_1UP
 E0_ARRAY = np.array([[E0_1UP, E0_1DN],
                      [E0_2UP, E0_2DN]])
+
+# Interaction energy amplitudes
+U = 30              # eV
+J = - 0.3 * U       # eV
