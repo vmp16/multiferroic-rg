@@ -1,4 +1,5 @@
 import numpy as np
+from scipy.optimize import brentq
 
 def get_kmesh(k_lim, n_pts):
     """
@@ -62,6 +63,24 @@ def deriv_fermi_distrib(E, mu, T):
 
 # ================ DOS & PARTICLE DENSITY ================
 
+def precompute_flavor_bands(systems, KX, KY):
+    """
+    Precomputes the energy band structures for a list of McCannCarts systems.
+    
+    Parameters
+    ----------
+    systems : list of McCannCarts
+        List of initialized model systems representing different flavors.
+    KX, KY : ndarray
+        2D k-space coordinate meshes.
+
+    Returns
+    ----------
+    all_bands : list of tuples
+        List containing (E0, E1) energy band pairs for each flavor.
+    """
+    return [system.get_energy(KX, KY) for system in systems]
+
 def get_dos(system, px, py, T, mu):
     """
     Calculate the Density of States.
@@ -78,25 +97,101 @@ def get_dos(system, px, py, T, mu):
         
     return total_dos * prefactor
 
+def get_flavor_density_from_bands(bands, mu_alpha, T_eff, prefactor, unit_cell_to_cm2):
+    """
+    Calculates the carrier density n_alpha (in cm^-2) for a given flavor band pair at Fermi level mu_alpha.
+    """
+    E0, E1 = bands
+    n_e = fermi_distrib(E0, mu_alpha, T_eff)
+    n_h = 1.0 - fermi_distrib(E1, mu_alpha, T_eff)
+    
+    return prefactor * np.sum(n_e - n_h) * unit_cell_to_cm2
+
 def get_part_density(system, px, py, T, mu):
-    """
-    Calculate the particle density for the given flavor.
-    Returns: n [states / unit cell]
-    """
+    """Calculate the particle density for a given flavor system [states / unit cell]."""
     dk = px[0, 1] - px[0, 0]
     prefactor = (dk**2) / (2 * np.pi)**2
+    bands = system.get_energy(px, py)
+    
+    # Unit factor set to 1.0 to retain the original [states / unit cell] return value
+    return get_flavor_density_from_bands(bands, mu, T, prefactor, unit_cell_to_cm2=1.0)
 
-    E0, E1 = system.get_energy(px, py)
+# ================ MEAN FIELD CALCULATIONS ================
 
-    # Count electrons in the Conduction band
-    n_e = fermi_distrib(E0, mu, T)
-    # Count holes in the Valence band
-    n_h = 1.0 - fermi_distrib(E1, mu, T)
+def compute_mf_symmetric_potentials(n_flavs, U, area_uc):
+    """
+    Computes mean-field SU(4) symmetric interaction energy shifts V_alpha for N flavors (Eq. S4).
+    
+    V_alpha = U * area_uc * sum_{beta != alpha} n_beta
+            = U * area_uc * (N_tot - n_alpha)
+    """
+    n_tot = np.sum(n_flavs)
+    return U * area_uc * (n_tot - n_flavs)
 
-    # Net density
-    n_total = np.sum(n_e - n_h)
+def solve_self_consistent_mean_field(all_bands, n_target, U, area_uc, T_eff, prefactor, unit_cell_to_cm2, initial_n_flavs, max_iter=200, tolerance=1e-6, mixing=0.4, mu_min=-0.10, mu_max=0.10):
+    """
+    Executes the self-consistent mean-field iteration loop for arbitrary flavors.
+    
+    Returns
+    -------
+    n_flavs : ndarray
+        Converged flavor densities.
+    V_flavs : ndarray
+        Converged interaction potential shifts.
+    mu_global : float
+        Converged global chemical potential.
+    """
+    n_flavs = np.array(initial_n_flavs, dtype=float)
+    num_flavors = len(all_bands)
 
-    return prefactor * n_total
+    # Define root function for the global Fermi level
+    def total_density_residual(mu_global, V_flavs):
+        n_tot = 0.0
+        for idx in range(num_flavors):
+            mu_alpha = mu_global - V_flavs[idx]
+            n_tot += get_flavor_density_from_bands(
+                all_bands[idx], mu_alpha, T_eff, prefactor, unit_cell_to_cm2
+            )
+        return n_tot - n_target
+
+    print("Starting Self-Consistent Loop...")
+    for iteration in range(max_iter):
+        # Calculate interaction potentials
+        V_flavs = compute_mf_symmetric_potentials(n_flavs, U, area_uc)
+
+        # Find global Fermi level matching total charge density target
+        try:
+            mu_global = brentq(total_density_residual, mu_min, mu_max, args=(V_flavs,), xtol=1e-7)
+        except ValueError:
+            raise ValueError(
+                f"Iteration {iteration}: Target density outside mu bracket [{mu_min}, {mu_max}] eV."
+            )
+
+        # Compute updated densities for each flavor
+        n_flavs_new = np.array([
+            get_flavor_density_from_bands(
+                all_bands[i], mu_global - V_flavs[i], T_eff, prefactor, unit_cell_to_cm2
+            )
+            for i in range(num_flavors)
+        ])
+
+        # Evaluate the error & Check convergence
+        rel_error = np.max(np.abs(n_flavs_new - n_flavs) / np.abs(n_target))
+        print(f"Iter {iteration:02d} | mu_global: {mu_global*1e3:.3f} meV | Max Error: {rel_error:.3e} | n_flavs: {n_flavs}")
+
+        if rel_error < tolerance:
+            print(f"\n---> Converged in {iteration + 1} iterations!")
+            n_flavs = n_flavs_new
+            break
+
+        # Apply linear mixing
+        n_flavs = (1.0 - mixing) * n_flavs + mixing * n_flavs_new
+    else:
+        print("\n---> Warning: Reached maximum iterations without full convergence.")
+
+    # Recompute potential shifts with final densities
+    V_flavs = compute_mf_symmetric_potentials(n_flavs, U, area_uc)
+    return n_flavs, V_flavs, mu_global
 
 
 # ================ WAVEFUNCTIONS PROPERTIES ================

@@ -3,7 +3,7 @@ from pathlib import Path
 from scipy.optimize import brentq
 
 from model.model import McCannCarts
-from model.analysis import fermi_distrib, get_kmesh
+from model.analysis import fermi_distrib, get_kmesh, get_part_density
 import model.config as config
 
 '''
@@ -35,8 +35,10 @@ KX, KY = get_kmesh(config.K_LIM, config.N_PTS)
 dk = KX[0, 1] - KX[0, 0]
 prefactor = (dk**2) / (2 * np.pi)**2
 
+# Define the unit cell area in cm^2
+area_uc = (np.sqrt(3) / 2) * (config.a * 1e-8)**2
 # Conversion factor from density per unit cell to /cm^2
-unit_cell_to_cm2 = 1.0 / (config.a**2) * 1e16
+unit_cell_to_cm2 = 1.0 / area_uc
 
 # Build the systems
 #   I SHOULD PROBABLY BUILD A FUNCTION PRECOMPUTE_ENERGY WITH A LIST OF FLAVORS TO BE CONSIDERED
@@ -91,9 +93,6 @@ mu_min, mu_max = -0.10, 0.10  # eV
 print("Starting Self-Consistent Loop...")
 for iteration in range(max_iter):
 
-    # Define the unit cell area in cm^2
-    area_uc = (np.sqrt(3) / 2) * (config.a * 1e-8)**2
-
     # Get mean-field interactions V_alpha (Eq. S4)
     V_flavs = np.array([
         config.U * area_uc * (np.sum(n_flavs) - n_flav)
@@ -110,7 +109,7 @@ for iteration in range(max_iter):
     # Get new flavor densities at mu_alpha = mu_global - V_alpha
     n_flavs_new = np.array([
         get_flavor_density(mu_global - V_flavs[i], i)
-        for i in range(len(n_flavs))
+        for i in range(len(V_flavs))
     ])
 
     # Evaluate the error and get the max
@@ -142,10 +141,13 @@ mu_flavs_final = mu_global - V_flavs_final
 print("\n" + "="*15 + " FINAL FLAVOR RESULTS " + "="*15)
 print(f"Global Fermi Level (mu_global): {mu_global * 1e3:.4f} meV")
 
-# # Verify for flavor 0
+# Verify for flavor 0
 # mu_0_check = solve_mu_for_density(n_flavs_new[0], 0)
 # print(f"Check mu_0 via direct inversion: {mu_0_check * 1e3:.4f} meV")
 # print(f"Check mu_0 via (mu_global - V_0)  : {(mu_global - V_flavs_final[0]) * 1e3:.4f} meV")
+
+# Check flavor 0 with integration from analysis.get_part_density()
+
 
 for idx, (n_i, V_i, mu_i) in enumerate(zip(n_flavs, V_flavs_final, mu_flavs_final)):
     print(f"\nFlavor {idx}:")
