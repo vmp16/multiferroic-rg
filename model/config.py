@@ -6,8 +6,10 @@ PROJECT_ROOT = Path(__file__).resolve().parents[1]
 FIGURES_DIR = PROJECT_ROOT / 'figures'
 DATA_DIR = PROJECT_ROOT / 'data'
 
-# Lattice constant
-a = 2.46          # [Å]
+# Lattice constants
+a = 2.46          # Lattice constants [Å]
+area_uc = (np.sqrt(3) / 2) * (a * 1e-8)**2  # unit cell area [cm^2]
+unit_cell_to_cm2 = 1.0 / area_uc
 
 # Hopping parameters for ABC Graphene, in eV
 # Values from Huang's Suppl. Mat.
@@ -43,10 +45,10 @@ DELTAS = np.array([[DELTA1UP, DELTA1DN],
                    [DELTA2UP, DELTA2DN]])
 
 # On-site energies [eV]
-E0_1UP = 0.005
-E0_1DN = 0.0
+E0_1UP = 9.3950*1e-3
+E0_1DN = -4.9374*1e-3
 E0_2UP = E0_1DN
-E0_2DN = -E0_1UP
+E0_2DN = -14.5531*1e-3
 E0_ARRAY = np.array([[E0_1UP, E0_1DN],
                      [E0_2UP, E0_2DN]])
 

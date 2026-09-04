@@ -17,7 +17,7 @@ def plot_bands(mu_plot=0.0):
 
     spin_labels = ['up', 'dn']
     spin_colors = {'up': 'red', 'dn': 'blue'}
-    spin_ls = ['-', ':']
+    spin_ls = ['-', '--']
 
     for ax, (v_idx, xi) in zip(axes, enumerate(config.VALLEY_IDX)):
         valley_name = r"$K$" if xi == 1 else r"$K'$"
@@ -72,4 +72,4 @@ def plot_bands(mu_plot=0.0):
     plt.show()
 
 if __name__ == "__main__":
-    plot_bands(mu_plot=0.0)
+    plot_bands(mu_plot=0.2207)

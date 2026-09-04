@@ -4,32 +4,32 @@ from model.model import McCannCarts
 import model.config as config
 from model.analysis import get_kmesh, precompute_flavor_bands, solve_self_consistent_mean_field
 
-print(15 * "=" + " STARTING MEAN FIELD CALCULATION (2 FLAVORS) " + 15 * "=")
+print(15 * "=" + " STARTING MEAN FIELD CALCULATION (4 FLAVORS) " + 15 * "=")
 
 # -------- System & Target Setup --------
 n_target = -3e11  # total charge carrier density in /cm^2
 
-# Define target flavor configuration dynamically
-# (Easily scale to 4 flavors by adding valley/spin configurations here)
 systems = [
     McCannCarts(
-        N=config.N, valley_idx=config.VALLEY_IDX[0], Delta=0.0,
+        N=config.N, valley_idx=xi, Delta=delta,
         gamma0=config.GAMMA0, gamma1=config.GAMMA1, gamma2=config.GAMMA2,
         gamma3=config.GAMMA3, gamma4=config.GAMMA4
-    ),
-    McCannCarts(
-        N=config.N, valley_idx=config.VALLEY_IDX[1], Delta=0.0,
-        gamma0=config.GAMMA0, gamma1=config.GAMMA1, gamma2=config.GAMMA2,
-        gamma3=config.GAMMA3, gamma4=config.GAMMA4
-    ),
+    )
+    for xi, delta in zip(2*config.VALLEY_IDX, config.DELTAS.T.flatten())
 ]
 
+# -------- Params Initialization --------
 # Seeds / initial flavor distribution
-m_seed = 0.1 * n_target
-initial_n_flavs = [
-    (n_target + m_seed) / 2.0,
-    (n_target - m_seed) / 2.0
-]
+m_seed = 0.05 * n_target
+
+# Assuming 2 gapped flavors
+# To see other initializations go to the test file
+initial_n_flavs = np.array([
+    (n_target + m_seed) / 2,
+    0.0,
+    0.0,
+    (n_target - m_seed) / 2
+])
 
 # -------- Grid --------
 KX, KY = get_kmesh(config.K_LIM, config.N_PTS)

@@ -118,9 +118,25 @@ def get_part_density(system, px, py, T, mu):
 
 # ================ MEAN FIELD CALCULATIONS ================
 
+def V_int_SU4(n_vec, U):
+    """Computes SU(4) symmetric interaction potential."""
+    n1, n2, n3, n4 = n_vec
+    # Sum over distinct pairs alpha < beta
+    pair_sum = n1*n2 + n1*n3 + n1*n4 + n2*n3 + n2*n4 + n3*n4
+    return U * A_uc * pair_sum
+
+def V_int_anisotropic(n_vec, U, J):
+    """Computes SU(4) broken interaction potential with Hund's anisotropy."""
+    n1, n2, n3, n4 = n_vec
+    
+    su4_part = V_int_SU4(n_vec, U)
+    hunds_part = J * A_uc * (n1 - n3) * (n2 - n4)
+    
+    return su4_part + hunds_part
+
 def compute_mf_symmetric_potentials(n_flavs, U, area_uc):
     """
-    Computes mean-field SU(4) symmetric interaction energy shifts V_alpha for N flavors (Eq. S4).
+    Computes the derivative of the mean-field SU(4) symmetric interaction shifts V_alpha for N flavors (Eq. S4).
     
     V_alpha = U * area_uc * sum_{beta != alpha} n_beta
             = U * area_uc * (N_tot - n_alpha)
