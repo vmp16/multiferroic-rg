@@ -72,4 +72,4 @@ def plot_bands(mu_plot=0.0):
     plt.show()
 
 if __name__ == "__main__":
-    plot_bands(mu_plot=0.2207)
+    plot_bands(mu_plot=0.0)

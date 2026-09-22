@@ -1,5 +1,18 @@
 import numpy as np
 from scipy.optimize import brentq
+from itertools import combinations
+
+# --------- Useful Tools ----------
+def progress_bar(current, total, width=40):
+    FILL  = "\u2588"  # █
+    EMPTY = "\u2591"  # ░
+
+    filled = int(width * current / total)
+    bar = FILL * filled + EMPTY * (width - filled)
+    pct = current / total * 100
+    print(f"\r {bar}  {pct:.1f}%", end="", flush=True)
+
+# --------- Usual Simple Functions ----------
 
 def get_kmesh(k_lim, n_pts):
     """
@@ -107,6 +120,44 @@ def get_flavor_density_from_bands(bands, mu_alpha, T_eff, prefactor, unit_cell_t
     
     return prefactor * np.sum(n_e - n_h) * unit_cell_to_cm2
 
+def get_flavor_dos(bands, mu_alpha, T_eff, prefactor, unit_cell_to_cm2):
+    """
+    Get the Density of States (DOS) of a given flavor up to a given value of energy mu_alpha.
+    """
+    E0, E1 = bands
+    e_vals = np.linspace(0.0, mu_alpha, 100)
+
+    dos = np.zeros_like(e_vals, dtype=float)
+
+    for i, e in enumerate(e_vals):
+        df_dE0 = deriv_fermi_distrib(E0, e, T_eff)
+        df_dE1 = deriv_fermi_distrib(E1, e, T_eff)
+
+        dos[i] = np.sum(- df_dE0 - df_dE1) * prefactor
+
+    return dos
+
+def get_flavor_kinetic_energy_from_bands(bands, mu_alpha, T_eff, prefactor, unit_cell_to_cm2):
+    """
+    Calculates the kinetic energy E_alpha(mu_alpha) = integral_0^mu_alpha eps * rho(eps) d eps
+    (in eV * cm^-2) for a given flavor band pair, at Fermi level mu_alpha.
+
+    Follows the same construction as get_flavor_density_from_bands: at T -> 0,
+    fermi_distrib(E, mu, T) becomes a Heaviside step Theta(mu - E), so
+
+        n_e   = sum_k Theta(mu - E0_k)             -> integral_0^mu rho(eps) d eps
+        E_kin = sum_k E0_k * Theta(mu - E0_k)       -> integral_0^mu eps * rho(eps) d eps
+
+    At finite T, the sharp cutoff is replaced by the Fermi function (same substitution
+    used for n_e), and each band energy weights its own occupation term directly -
+    no explicit integration over eps is needed.
+    """
+    E0, E1 = bands
+    e_e = E0 * fermi_distrib(E0, mu_alpha, T_eff)
+    e_h = E1 * (1.0 - fermi_distrib(E1, mu_alpha, T_eff))
+
+    return prefactor * np.sum(e_e - e_h) * unit_cell_to_cm2
+
 def get_part_density(system, px, py, T, mu):
     """Calculate the particle density for a given flavor system [states / unit cell]."""
     dk = px[0, 1] - px[0, 0]
@@ -118,19 +169,26 @@ def get_part_density(system, px, py, T, mu):
 
 # ================ MEAN FIELD CALCULATIONS ================
 
-def V_int_SU4(n_vec, U):
+def V_int_SU4(n_vec, U, area_uc):
     """Computes SU(4) symmetric interaction potential."""
-    n1, n2, n3, n4 = n_vec
+    # n1, n2, n3, n4 = n_vec
     # Sum over distinct pairs alpha < beta
-    pair_sum = n1*n2 + n1*n3 + n1*n4 + n2*n3 + n2*n4 + n3*n4
-    return U * A_uc * pair_sum
+    # pair_sum = n1*n2 + n1*n3 + n1*n4 + n2*n3 + n2*n4 + n3*n4
 
-def V_int_anisotropic(n_vec, U, J):
-    """Computes SU(4) broken interaction potential with Hund's anisotropy."""
+    # Generalized for any n_flavors
+    pair_sum = sum(n_vec[i] * n_vec[j] for i, j in combinations(range(len(n_vec)), 2))
+
+    return U * area_uc * pair_sum
+
+def V_int_anisotropic(n_vec, U, J, area_uc):
+    """
+    Computes SU(4) broken interaction potential with Hund's anisotropy.
+    WARNING: It is only defined for 4 flavors.
+    """
     n1, n2, n3, n4 = n_vec
     
-    su4_part = V_int_SU4(n_vec, U)
-    hunds_part = J * A_uc * (n1 - n3) * (n2 - n4)
+    su4_part = V_int_SU4(n_vec, U, area_uc)
+    hunds_part = J * area_uc * (n1 - n3) * (n2 - n4)
     
     return su4_part + hunds_part
 
@@ -143,6 +201,19 @@ def compute_mf_symmetric_potentials(n_flavs, U, area_uc):
     """
     n_tot = np.sum(n_flavs)
     return U * area_uc * (n_tot - n_flavs)
+
+def compute_mf_anisotropic_potentials(n_flavs, U, J, area_uc):
+    """∂V_int_anisotropic/∂n_α for each flavor."""
+    n1, n2, n3, n4 = n_flavs
+    n_tot = np.sum(n_flavs)
+    su4_shifts = U * area_uc * (n_tot - n_flavs)
+    hunds_shifts = J * area_uc * np.array([
+         (n2 - n4),   # ∂/∂n1
+         (n1 - n3),   # ∂/∂n2
+        -(n2 - n4),   # ∂/∂n3
+        -(n1 - n3),   # ∂/∂n4
+    ])
+    return su4_shifts + hunds_shifts
 
 def solve_self_consistent_mean_field(all_bands, n_target, U, area_uc, T_eff, prefactor, unit_cell_to_cm2, initial_n_flavs, max_iter=200, tolerance=1e-6, mixing=0.4, mu_min=-0.10, mu_max=0.10):
     """
@@ -193,11 +264,15 @@ def solve_self_consistent_mean_field(all_bands, n_target, U, area_uc, T_eff, pre
 
         # Evaluate the error & Check convergence
         rel_error = np.max(np.abs(n_flavs_new - n_flavs) / np.abs(n_target))
-        print(f"Iter {iteration:02d} | mu_global: {mu_global*1e3:.3f} meV | Max Error: {rel_error:.3e} | n_flavs: {n_flavs}")
+        
+        print(f"Iter {iteration:02d} | mu_global: {mu_global*1e3:.3f} meV | Max Error: {rel_error:.3e} | n_flavs: ", np.array2string(n_flavs, formatter={'float': '{:.4e}'.format}))
 
         if rel_error < tolerance:
             print(f"\n---> Converged in {iteration + 1} iterations!")
             n_flavs = n_flavs_new
+            # Recompute quantities with final densities
+            V_flavs = compute_mf_symmetric_potentials(n_flavs, U, area_uc)
+            mu_global = brentq(total_density_residual, mu_min, mu_max, args=(V_flavs,), xtol=1e-7)
             break
 
         # Apply linear mixing
@@ -205,8 +280,6 @@ def solve_self_consistent_mean_field(all_bands, n_target, U, area_uc, T_eff, pre
     else:
         print("\n---> Warning: Reached maximum iterations without full convergence.")
 
-    # Recompute potential shifts with final densities
-    V_flavs = compute_mf_symmetric_potentials(n_flavs, U, area_uc)
     return n_flavs, V_flavs, mu_global
 
 
@@ -412,3 +485,203 @@ def integrate_qmd_chunk(qmd_tensor_accumulated, band_E, mu_vals, T_eff, prefacto
     
     # Contract spatial indices and sum over the chunk
     return np.einsum('abcjk, mjk -> mabc', qmd_tensor_accumulated, df_dE) * prefactor
+
+# ================ MONTE-CARLO GROUND STATE SEARCH ================
+def sample_flavor_densities(n_target, n_flavors, num_picks, m_seed, rng=None):
+    """
+    Draw random flavor-density configurations around the symmetric point, all constrained to sum exactly to n_target.
+
+    Each flavor density is drawn uniformly within
+        [1 - m_seed, 1 + m_seed] * (n_target / n_flavors)
+    and then rescaled so that they all sum to n_target.
+
+    Parameters
+    ----------
+    n_target : float
+        Total carrier density [cm^-2].
+    n_flavors : int
+        Number of flavors.
+    num_picks : int
+        Number of random realizations to generate.
+    m_seed : float
+        Fractional maximal deviation from the symmetric point, defining the random range.
+    rng : numpy.random.Generator or None
+        Optional seeded RNG (e.g. np.random.delfault_rng(41)). If None, the global numpy random state is used.
+
+    Returns
+    -------
+    n_flavs_seed : ndarray, shape(n_flavors, num_picks)
+        Sampled density configurations, where each column sums to n_target.
+    """
+    _uniform = rng.uniform if rng is not None else np.random.uniform
+    raw = _uniform(1 - m_seed, 1 + m_seed, (n_flavors, num_picks)) * (n_target / n_flavors)
+    # Normalize to enforce each configuration to sum to n_target
+    n_flavs_seed = raw * (n_target / raw.sum(axis=0))
+
+    return n_flavs_seed
+
+def build_density_interp_tables(all_bands, T_eff, prefactor, unit_cell_to_cm2, mu_min=-0.1, mu_max=0.1, n_table_pts=2000):
+    """
+    Build a per-flavor look-up table that maps mu -> n_flav(mu), then used inverted (via np.interp) to map n_flav -> mu, avoiding repeated root finding.
+
+    Parameters
+    ----------
+    all_bands : list of (E0, E1) tuples, len = n_flavors
+        Precomputed band pairs for each flavor.
+    T_eff : float
+        Thermal energy kB*T [eV].
+    prefactor : float
+        k-space integration prefactor (dk^2 / (2*pi^2))
+    unit_cell_to_cm2 : float
+        Conversion factor from unit-cell units to cm^-2.
+    mu_min, mu_max : float, optional
+        Limits of the chemical potential bracket [eV].
+    n_table_pts : int
+        Number of points in the mu_grid, increase for higher interpolation accuracy.
+
+    Returns
+    -------
+    mu_table : ndarray, shape (n_table_pts,)
+        Uniformly spaced mu points.
+    n_table : ndarray, shape (n_flavors, n_table_pts)
+        Flavor densities evaluated at each mu point.
+
+    Raises
+    ------
+    RunTimeError
+        If n_flav(mu) is not strictly monotone for any flavor, which would make the inversion via np.interp invalid.
+    """
+    n_flavors = len(all_bands)
+    mu_table = np.linspace(mu_min, mu_max, n_table_pts)
+    n_table = np.zeros((n_flavors, n_table_pts))    # n_flav(mu) per flavor, shape (4, n_table_pts)
+
+    for a, flav_bands in enumerate(all_bands):
+        for j, mu_j in enumerate(mu_table):
+            n_table[a, j] = get_flavor_density_from_bands(
+                flav_bands, mu_j, T_eff, prefactor, unit_cell_to_cm2
+            )
+        # Sanity check: n_flav(mu) must be strictly monotone for np.interp to be valid.
+        # A non-monotone table would silently produce wrong results.
+        if not np.all(np.diff(n_table[a]) > 0):
+            raise RuntimeError(
+                f"Flavor {a}: n_flav(mu) is not strictly increasing on [{mu_min}, {mu_max}]. "
+                "Widen the bracket or check the band structure."
+            )
+
+    return mu_table, n_table
+
+def evaluate_realizations(n_flavs_seed, all_bands, mu_table, n_table,T_eff, prefactor, unit_cell_to_cm2, v_int_func):
+    """
+    For every randomly sample configuration, look up the flavor chemical potential via interpolation, compute kinetic energies and evaluate the interaction potential.
+
+    The interaction potential is supplied as a **pre-configured callable** ``v_int_func(n_vec) -> float``.  All physical parameters of the interaction (U, J, area_uc, …) must be fixed in advance with functools.partial or a lambda, so that this function stays agnostic to the form of V_int. For example:
+ 
+        from functools import partial
+        v_int = partial(V_int_anisotropic, U=config.U, J=0, area_uc=config.area_uc)
+
+    Parameters
+    ----------
+    n_flavs_seed : ndarray, shape(n_flavors, num_picks)
+        Sampled density configurations, where each column sums to n_target.
+    all_bands : list of (E0, E1) tuples, len = n_flavors
+        Precomputed band pairs for each flavor.
+    mu_table : ndarray, shape (n_table_pts,)
+        Uniformly spaced mu points.
+    n_table : ndarray, shape (n_flavors, n_table_pts)
+        Flavor densities evaluated at each mu point.
+    T_eff : float
+        Thermal energy kB*T [eV].
+    prefactor : float
+        k-space integration prefactor (dk^2 / (2*pi^2)).
+    unit_cell_to_cm2 : float
+        Conversion factor from unit-cell units to cm^-2.
+    v_int_func : callable
+        Interaction energy function with signature ``v_int_func(n_vec) -> float``, where n_vec is a 1D array of length n_flavors.
+
+    Returns
+    -------
+    mu_flav_arr : ndarray, shape (num_picks, n_flavors)
+        Flavor chemical potential for each realization. NaN for inavlid ones.
+    E_flav_arr : ndarray, shape (num_picks, n_flavors)
+        Flavor kinetic energy for each realization [eV·cm^-2]. NaN for inavlid ones.
+    V_int_vec : ndarray, shape (num_picks,)
+        Interaction potential for each realization. NaN for invalid ones.
+    valid_mask : ndarray of bool, shape (num_picks,)
+        True for realizations where every flavor lies within the interpolation table range.
+    """
+    n_flavors, num_picks = n_flavs_seed.shape
+
+    mu_flav_arr = np.full((num_picks, n_flavors), np.nan)
+    E_flav_arr = np.full((num_picks, n_flavors), np.nan)
+    V_int_vec = np.full(num_picks, np.nan)
+    valid_mask = np.ones(num_picks, dtype=bool)
+
+    # Step 1: invert n_flav(mu) for every flavor via interpolation
+    for a, flav_bands in enumerate(all_bands):
+        n_flav_targets = n_flavs_seed[a]    # shape (num_picks,): all the realizations for one flavor
+
+        # Identify realizations where n_flav_target is out of the table range
+        out_of_range = (n_flav_targets < n_table[a, 0]) | (n_flav_targets > n_table[a, -1])
+        valid_mask &= ~out_of_range
+        # WARNING: some values might have been pushed out of range by the rescaling after the random sampling to ensure the n_target constraint. Not a big deal since they are just not taken into account, but if they were an important percentage of the total points, the tables range should be increased.
+
+        # Invert n_flav(mu) through the interpolation
+        mu_flav_arr[:, a] = np.interp(n_flav_targets, n_table[a], mu_table)
+
+    # Step 2: get the kinetic energies and interaction potentials (valid realizations only)
+    for i in np.where(valid_mask)[0]:       # list of indices of the valid realizations
+        for a, flav_bands in enumerate(all_bands):
+            E_flav_arr[i, a] = get_flavor_kinetic_energy_from_bands(
+                flav_bands, mu_flav_arr[i, a], T_eff, prefactor, unit_cell_to_cm2
+            )
+
+        V_int_vec[i] = v_int_func(n_flavs_seed[:, i])
+
+    n_discarded = num_picks - np.count_nonzero(valid_mask)      # total - valid realizations = number of realizations out of bounds
+    if n_discarded:
+        print(f"Discarded {n_discarded}/{num_picks} realizations (target density out of range).")
+    else:
+        print("OK: All the realizations lie within the table range.")
+    if not np.any(valid_mask):      # if valid_mask is full of False
+        raise RuntimeError("No valid realizations found: widen [mu_min, mu_max] or m_seed")
+
+    return mu_flav_arr, E_flav_arr, V_int_vec, valid_mask
+
+def find_minimum_energy_configuration(n_flavs_seed, mu_flav_arr, E_flav_arr, V_int_vec, valid_mask):
+    """
+    Assemble the total internal energy E_int = E_kin + V_int for every valid realization and return the ground-state configuration (the one minimizing E_int).
+
+    Parameters
+    ----------
+    n_flavs_seed : ndarray, shape(n_flavors, num_picks)
+        Sampled density configurations, where each column sums to n_target.
+    mu_flav_arr : ndarray, shape (num_picks, n_flavors)
+        Flavor chemical potential for each realization. NaN for inavlid ones.
+    E_flav_arr : ndarray, shape (num_picks, n_flavors)
+        Flavor kinetic energy for each realization [eV·cm^-2]. NaN for inavlid ones.
+    V_int_vec : ndarray, shape (num_picks,)
+        Interaction potential for each realization. NaN for invalid ones.
+    valid_mask : ndarray of bool, shape (num_picks,)
+        True for realizations where every flavor lies within the interpolation table range.
+
+    Returns
+    -------
+    n_sol : ndarray, shape (n_flavors,)
+        Ground-state flavor densities [cm^-2].
+    mu_flavs_sol : ndarray, shape (n_flavors,)
+        Ground-state flavor chemical potentials [eV].
+    E_int_min : float
+        Minimal total internal energy [eV·cm^-2].
+    """
+    E_kin_vec = np.sum(E_flav_arr, axis=1)   # shape (num_picks,)
+    E_int_vec = E_kin_vec + V_int_vec
+    E_int_vec[~valid_mask] = np.inf     # invalid realizations never win
+
+    E_int_min = np.min(E_int_vec)
+    E_int_min_idx = np.argmin(E_int_vec)
+
+    # Get the results
+    n_sol  = n_flavs_seed[:, E_int_min_idx]
+    mu_sol = mu_flav_arr[E_int_min_idx]
+
+    return n_sol, mu_sol, E_int_min

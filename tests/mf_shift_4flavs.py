@@ -44,15 +44,15 @@ systems = [
 
 # -------- Params Initialization --------
 # Seeds / initial flavor distribution
-m_seed = 0.05 * n_target
+m_seed = 0.0 * n_target
 
 # Initialization with 1 single seed
-# initial_n_flavs = [
-#     (n_target + m_seed) / 4.0,      # K, up
-#     (n_target + m_seed) / 4.0,      # K', up
-#     (n_target - m_seed) / 4.0,      # K, down
-#     (n_target - m_seed) / 4.0       # K', down
-# ]
+initial_n_flavs = [
+    (n_target + m_seed) / 4.0,      # K, up
+    (n_target + m_seed) / 4.0,      # K', up
+    (n_target - m_seed) / 4.0,      # K, down
+    (n_target - m_seed) / 4.0       # K', down
+]
 
 # # Initialization with 4 random values
 # n_base = n_target / 4.0
@@ -71,12 +71,12 @@ m_seed = 0.05 * n_target
 # initial_n_flavs = (n_base + deltas).tolist()
 
 # Assuming 2 gapped flavors
-initial_n_flavs = np.array([
-    (n_target + m_seed) / 2,
-    0.0,
-    0.0,
-    (n_target - m_seed) / 2
-])
+# initial_n_flavs = np.array([
+#     (n_target + m_seed) / 2,
+#     0.0,
+#     0.0,
+#     (n_target - m_seed) / 2
+# ])
 
 # -------- Grid --------
 KX, KY = get_kmesh(config.K_LIM, config.N_PTS)

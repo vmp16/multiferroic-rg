@@ -24,7 +24,7 @@ def precompute_energy_bands(KX, KY, U=0.0):
                 N=config.N, valley_idx=xi, Delta=delta,
                 gamma0=config.GAMMA0, gamma1=config.GAMMA1,
                 gamma2=config.GAMMA2, gamma3=config.GAMMA3,
-                gamma4=config.GAMMA4, E0=0 #e0
+                gamma4=config.GAMMA4, E0=e0
             )
 
             # Get energies and sotre them
@@ -75,7 +75,7 @@ def find_mu(n_target, mu_min=-0.2, mu_max=0.2, U=0.0):
         raise
 
 def main():
-    n_target = 0.0 #-3e11        # in /cm^2
+    n_target = -3.0e11        # in /cm^2
 
     # Bracket for the root finding (in eV)
     mu_min = -0.1

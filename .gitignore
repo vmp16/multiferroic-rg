@@ -1,6 +1,7 @@
 figures/
 data/
 progress-report/
+mininmization-strategies/
 __pycache__/
 multiferroic_rg.egg-info/
 *.log

@@ -1,4 +1,5 @@
 import numpy as np
+import time
 
 from model.model import McCannCarts
 import model.config as config
@@ -9,6 +10,7 @@ print(15 * "=" + " STARTING MEAN FIELD CALCULATION (4 FLAVORS) " + 15 * "=")
 # -------- System & Target Setup --------
 n_target = -3e11  # total charge carrier density in /cm^2
 
+# Order : (K, ↑) (K′, ↑) (K, ↓) (K′, ↓)
 systems = [
     McCannCarts(
         N=config.N, valley_idx=xi, Delta=delta,
@@ -20,7 +22,7 @@ systems = [
 
 # -------- Params Initialization --------
 # Seeds / initial flavor distribution
-m_seed = 0.05 * n_target
+m_seed = 0.5 * n_target
 
 # Assuming 2 gapped flavors
 # To see other initializations go to the test file
@@ -41,6 +43,7 @@ print("Precomputing energy bands for all active flavors...")
 all_bands = precompute_flavor_bands(systems, KX, KY)
 
 # -------- Execute Self-Consistent Mean Field Loop --------
+t0 = time.time()
 n_flavs_final, V_flavs_final, mu_global = solve_self_consistent_mean_field(
     all_bands=all_bands,
     n_target=n_target,
@@ -58,6 +61,7 @@ n_flavs_final, V_flavs_final, mu_global = solve_self_consistent_mean_field(
 # -------- Final Summary Output --------
 mu_flavs_final = mu_global - V_flavs_final
 
+t1 = time.time()
 print("\n" + "=" * 15 + " FINAL FLAVOR RESULTS " + "=" * 15)
 print(f"Global Fermi Level (mu_global): {mu_global * 1e3:.4f} meV")
 
@@ -66,3 +70,5 @@ for idx, (n_i, V_i, mu_i) in enumerate(zip(n_flavs_final, V_flavs_final, mu_flav
     print(f"  Density (n_{idx+1})           : {n_i:.3e} cm^-2")
     print(f"  Interaction Potential (V_{idx+1}): {V_i * 1e3:.4f} meV")
     print(f"  Flavor Fermi Level (mu_{idx+1}) : {mu_i * 1e3:.4f} meV")
+
+print(f"\nTotal time: {t1 - t0:.2f} s")
