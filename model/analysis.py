@@ -73,6 +73,47 @@ def deriv_fermi_distrib(E, mu, T):
 
     return - (fermi_distrib(E, mu, T))**2 * np.exp(x_clipped) / T
 
+def build_systems_with_displacement(D, config):
+    """
+    Construct the four McCannCarts systems with displacement field D applied
+    to every flavor gap: Delta_alpha(D) = delta_alpha + D.
+ 
+    Parameters
+    ----------
+    D : float
+        Displacement field contribution to the gap [eV].
+    config : module
+        The project config module (provides VALLEY_IDX, DELTAS, N,
+        GAMMA0..GAMMA4, E0_ARRAY).
+ 
+    Returns
+    -------
+    systems : list of McCannCarts, length 4
+        Systems in the canonical flavor order (K↑, K'↓, K↓, K'↑).
+    base_deltas : ndarray, shape (4,)
+        Intrinsic gap values delta_alpha (without D), in the same order.
+    """
+    from model.model import McCannCarts
+ 
+    valley_indices = 2 * config.VALLEY_IDX          # [1,-1] → [1,-1,1,-1]
+    base_deltas    = config.DELTAS.T.flatten()       # shape (4,)
+    e0_vals        = config.E0_ARRAY.T.flatten()     # shape (4,)
+ 
+    systems = [
+        McCannCarts(
+            N       = config.N,
+            valley_idx = xi,
+            Delta   = delta + D,
+            gamma0  = config.GAMMA0,
+            gamma1  = config.GAMMA1,
+            gamma2  = config.GAMMA2,
+            gamma3  = config.GAMMA3,
+            gamma4  = config.GAMMA4,
+        )
+        for xi, delta, e0 in zip(valley_indices, base_deltas, e0_vals)
+    ]
+    return systems, base_deltas
+
 
 # ================ DOS & PARTICLE DENSITY ================
 
@@ -281,6 +322,204 @@ def solve_self_consistent_mean_field(all_bands, n_target, U, area_uc, T_eff, pre
         print("\n---> Warning: Reached maximum iterations without full convergence.")
 
     return n_flavs, V_flavs, mu_global
+
+
+def solve_phase_mean_field(n_active, n_target, D, KX, KY, config, *, initial_n_flavs=None, mu_min=-0.1, mu_max=0.1, max_iter=200, tolerance=1e-6, mixing=0.4, verbose=True):
+    """
+    Run a self-consistent mean-field calculation (SCF) for a given number of occupied (active) flavors under a displacement field D.
+
+    The SCF minimizes the SU(4)-symmetric potential by iterating over the differential of the grand potential. Empty (inactive) flavors are kept at n = 0 trhoughout.
+
+    Parameters
+    ----------
+    n_active : int
+        Number of occupied flavors (1 to 4).
+    n_target : float
+        Total carrier density [cm^-2].
+    D : float
+        Displacement field [eV].
+    KX, KY : ndarray, shape (N_PTS, N_PTS)
+        Pre-built cartesian k-space grid.
+    config : module
+        Project configuration module.
+    initial_n_flavs : array-like, length n_active
+        Seed flavor densities for the active flavors. Default to the symmetric point n_target / n_active.
+    mu_min, mu_max : float
+        Bracket for the root finder [eV].
+    max_iter : int
+        Maximum SCF iterations.
+    tolerance : float
+        Convergence criterion for the SCF.
+    mixing : float
+        Linear mixing parameter.
+    verbose : bool
+        Print iteration log and convergence message.
+
+    Returns
+    -------
+    result : dict
+    
+    Raises
+    ------
+    """
+    # Check: valid number of occupied flavors
+    if not (1 <= n_active <= 4):
+        raise ValueError(f"n_active must be 1-4, got {n_active}")
+
+    # ----------- Build systems & Precompute all 4 bands -----------
+    systems, base_deltas = build_systems_with_displacement(D, config)
+
+    dk = KX[0, 1] - KX[0, 0]
+    prefactor = (dk**2) / (2 * np.pi)**2
+
+    if verbose:
+        print(f"\n{'='*60}")
+        print(f"  Phase: {n_active} active flavor(s) | n_target = {n_target:.3e} cm⁻² | D = {D*1e3:.2f} meV")
+        print(f"  Gaps (delta + D) [meV]: " + ", ".join(f"{(d+D)*1e3:.2f}" for d in base_deltas))
+        print(f"{'='*60}")
+        print("  Precomputing bands for all 4 flavors...")
+
+    all_bands = precompute_flavor_bands(systems, KX, KY)
+    # Active subset of bands
+    # WARINING: WE JUST TAKE THE FIRST BANDS
+    active_bands = all_bands[:n_active]
+
+    # ----------- Initial Guesses for Flavor Densities -----------
+    if initial_n_flavs is None:
+        # Symmetric seed
+        n_flavs_active = np.full(n_active, n_target / n_active)
+    else:
+        n_flavs_active = np.array(initial_n_flavs, dtype=float)
+        if len(n_flavs_active) != n_active:
+            raise ValueError(f"initial_n_flavs has length {len(initial_n_flavs)}, expected {n_active}.")
+
+    # ----------- Root Function for Fermi Level -----------
+    def total_density_residual(mu_global, V_flavs):
+        n_tot = 0.0
+        for idx in range(n_active):
+            mu_alpha = mu_global - V_flavs[idx]
+            n_tot += get_flavor_density_from_bands(
+                all_bands[idx], mu_alpha, config.T_eff, prefactor, config.unit_cell_to_cm2
+            )
+        return n_tot - n_target
+
+    # ----------- Exception: n_active = 1 -----------
+    if n_active == 1:
+        mu_global = brentq(
+            lambda mu: get_flavor_density_from_bands(
+                active_bands[0], mu, config.T_eff, prefactor, config.unit_cell_to_cm2
+            ) - n_target,
+            mu_min, mu_max,
+            xtol=1e-9,
+        )
+        n_flavs_active = np.array([n_target])
+        V_active       = np.array([0.0])
+        converged      = True
+
+        if verbose:
+            print(f"  n_active=1: no self-interaction, solved directly.")
+            print(f"  mu_global = {mu_global*1e3:.4f} meV\n")
+
+        # Assemble and return immediately, skipping the SCF loop
+        n_flavs_full              = np.zeros(4)
+        V_flavs_full              = np.zeros(4)
+        mu_flavs_full             = np.full(4, np.nan)
+        n_flavs_full[0]           = n_target
+        mu_flavs_full[0]          = mu_global
+
+        return {
+            "n_active"  : n_active,
+            "D"         : D,
+            "n_flavs"   : n_flavs_full,
+            "V_flavs"   : V_flavs_full,
+            "mu_global" : mu_global,
+            "mu_flavs"  : mu_flavs_full,
+            "converged" : converged,
+            "all_bands" : all_bands,
+            "prefactor" : prefactor,
+        }
+
+    # ----------- SCF Iteration Loop -----------
+    converged = False
+    mu_global = 0.0
+    V_active = np.zeros(n_active)
+
+    if verbose:
+        print("   Starting SCF loop...")
+
+    for iteration in range(max_iter):
+        # Calculate interaction potentials
+        V_active = compute_mf_symmetric_potentials(n_flavs_active, config.U, config.area_uc)
+
+        # ----- DEBUG -----
+        # print(f"  [debug] n_flavs_active = {n_flavs_active}")
+        # print(f"  [debug] V_active = {V_active}")
+        # -----------------
+
+        # Find mu_global satisfying the total density constraint
+        try:
+            mu_global = brentq(total_density_residual, mu_min, mu_max, args=(V_active,), xtol=1e-8)
+        except ValueError:
+            raise ValueError(
+                f"Iteration {iteration}: Target density outside mu bracket [{mu_min}, {mu_max}] eV."
+            )
+
+        # Update densities for active flavors
+        n_flavs_new = np.array([
+            get_flavor_density_from_bands(
+                active_bands[i], mu_global - V_active[i], config.T_eff, prefactor, config.unit_cell_to_cm2
+            )
+            for i in range(n_active)
+        ])
+
+        # Evaluate the error & Check convergence
+        rel_error = np.max(np.abs(n_flavs_new - n_flavs_active) / np.abs(n_target))
+
+        if verbose:
+            print(
+                f"Iter {iteration:02d} | mu_global: {mu_global*1e3:.3f} meV | Max Error: {rel_error:.3e} | n_flavs: ", np.array2string(n_flavs_active, formatter={'float': '{:.4e}'.format})
+            )
+
+        if rel_error < tolerance:
+            n_flavs_active = n_flavs_new
+            # Recompute V and mu with the final densities
+            V_active = compute_mf_symmetric_potentials(n_flavs_active, config.U, config.area_uc)
+            mu_global = brentq(total_density_residual, mu_min, mu_max, args=(V_active,), xtol=1e-7)
+            
+            converged = True
+            if verbose:
+                print(f"   ---> Converged in {iteration + 1} iterations!")
+            break
+        
+        # Linear mixing
+        n_flavs_active = (1.0 - mixing) * n_flavs_active + mixing * n_flavs_new
+    
+    else:
+        if verbose:
+            print("\n---> Warning: Reached maximum iterations without full convergence.")
+
+    # Assemble full 4-flavor arrays
+    n_flavs_full = np.zeros(4)
+    V_flavs_full = np.zeros(4)
+    n_flavs_full[:n_active] = n_flavs_active
+    V_flavs_full[:n_active] = V_active
+ 
+    mu_flavs_full = mu_global - V_flavs_full   # mu_alpha for all flavors
+    # For inactive flavors, the flavor Fermi level is not physically
+    # meaningful; set to NaN to make this explicit.
+    mu_flavs_full[n_active:] = np.nan
+ 
+    return {
+        "n_active" : n_active,
+        "D" : D,
+        "n_flavs" : n_flavs_full,
+        "V_flavs" : V_flavs_full,
+        "mu_global" : mu_global,
+        "mu_flavs" : mu_flavs_full,
+        "converged" : converged,
+        "all_bands" : all_bands,
+        "prefactor" : prefactor,
+    }
 
 
 # ================ WAVEFUNCTIONS PROPERTIES ================
@@ -570,7 +809,7 @@ def build_density_interp_tables(all_bands, T_eff, prefactor, unit_cell_to_cm2, m
 
     return mu_table, n_table
 
-def evaluate_realizations(n_flavs_seed, all_bands, mu_table, n_table,T_eff, prefactor, unit_cell_to_cm2, v_int_func):
+def evaluate_realizations(n_flavs_seed, all_bands, mu_table, n_table, T_eff, prefactor, unit_cell_to_cm2, v_int_func):
     """
     For every randomly sample configuration, look up the flavor chemical potential via interpolation, compute kinetic energies and evaluate the interaction potential.
 
@@ -685,3 +924,300 @@ def find_minimum_energy_configuration(n_flavs_seed, mu_flav_arr, E_flav_arr, V_i
     mu_sol = mu_flav_arr[E_int_min_idx]
 
     return n_sol, mu_sol, E_int_min
+
+# ================== PHASE DIAGRAM SUPPORT ==================
+
+def build_density_and_energy_tables(all_bands, T_eff, prefactor, unit_cell_to_cm2, mu_min=-0.1, mu_max=0.1, n_table_pts=2000):
+    """
+    Build tabulated tables of n_alpha(mu) and E_kin,alpha(mu) for every flavor on a common mu grid, to be used inverted through interpolation.
+
+    Parameters
+    ----------
+    all_bands : list of (E0, E1) tuples, len = n_flavors
+        Precomputed band pairs for each flavor.
+    T_eff : float
+        Thermal energy kB*T [eV].
+    prefactor : float
+        k-space integration prefactor (dk^2 / (2*pi^2))
+    unit_cell_to_cm2 : float
+        Conversion factor from unit-cell units to cm^-2.
+    mu_min, mu_max : float, optional
+        Limits of the chemical potential bracket [eV].
+    n_table_pts : int
+        Number of points in the mu_grid, increase for higher interpolation accuracy.
+
+    Returns
+    -------
+    mu_table : ndarray, shape (n_table_pts,)
+        Uniformly spaced mu points.
+    n_table : ndarray, shape (n_flavors, n_table_pts)
+        Flavor densities evaluated at each mu point.
+    e_table : ndarray, shape (n_flavors, n_table_pts)
+        Flavor kinetic energies at each mu point [eV cm^-2].
+
+    Raises
+    ------
+    RunTimeError
+        If n_flav(mu) is not strictly monotone for any flavor, which would make the inversion via np.interp invalid.
+    """
+    n_flavors = len(all_bands)
+    mu_table = np.linspace(mu_min, mu_max, n_table_pts)
+    n_table = np.zeros((n_flavors, n_table_pts))    # n_flav(mu) per flavor, shape (4, n_table_pts)
+    e_table = np.zeros((n_flavors, n_table_pts))
+
+    for a, flav_bands in enumerate(all_bands):
+        for j, mu_j in enumerate(mu_table):
+            n_table[a, j] = get_flavor_density_from_bands(
+                flav_bands, mu_j, T_eff, prefactor, unit_cell_to_cm2
+            )
+            e_table[a, j] = get_flavor_kinetic_energy_from_bands(
+                flav_bands, mu_j, T_eff, prefactor, unit_cell_to_cm2
+            )
+        # Sanity check: n_flav(mu) must be strictly monotone for np.interp to be valid.
+        # A non-monotone table would silently produce wrong results.
+        if not np.all(np.diff(n_table[a]) > 0):
+            raise RuntimeError(
+                f"Flavor {a}: n_flav(mu) is not strictly increasing on [{mu_min}, {mu_max}]. "
+                "Widen the bracket or check the band structure."
+            )
+    return mu_table, n_table, e_table
+
+def build_tables_histogram(
+    all_bands, T_eff, prefactor, unit_cell_to_cm2,
+    mu_min=-0.30, mu_max=0.30, n_table_pts=3000, n_bins=60000,
+):
+    """
+    Build n_alpha(mu) and E_kin,alpha(mu) tables by histogramming the band
+    energies once and convolving with the Fermi function.
+ 
+    The direct approach evaluates a full k-mesh sum at every mu, costing
+    O(N_mu * N_k).  But the summand depends on k only through the band
+    energy, so binning the energies into a density of states and then
+    convolving costs O(N_k + N_mu * N_bins) instead - typically two orders
+    of magnitude faster for a 1500^2 mesh.
+ 
+    Accuracy is controlled by the bin width, which must be small compared
+    to the thermal smearing: aim for dE <~ T_eff / 5.  The function warns
+    if that is not satisfied.
+ 
+    Parameters
+    ----------
+    all_bands : list of (E0, E1) tuples
+        Precomputed band pairs, one per flavor.
+    T_eff : float
+        Thermal energy kB*T [eV].
+    prefactor : float
+        k-space integration prefactor dk^2 / (2*pi)^2.
+    unit_cell_to_cm2 : float
+        Conversion from unit-cell density to cm^-2.
+    mu_min, mu_max : float
+        Bounds of the mu grid [eV].
+    n_table_pts : int
+        Number of mu samples.
+    n_bins : int
+        Number of energy bins for the histograms.
+ 
+    Returns
+    -------
+    mu_table : ndarray, shape (n_table_pts,)
+    n_table  : ndarray, shape (n_flavors, n_table_pts)
+    e_table  : ndarray, shape (n_flavors, n_table_pts)
+    """
+    n_flavors = len(all_bands)
+    mu_table = np.linspace(mu_min, mu_max, n_table_pts)
+    n_table = np.zeros((n_flavors, n_table_pts))
+    e_table = np.zeros((n_flavors, n_table_pts))
+ 
+    conv = prefactor * unit_cell_to_cm2
+ 
+    # Common energy range across all flavors and both bands
+    e_lo = min(min(b[0].min(), b[1].min()) for b in all_bands)
+    e_hi = max(max(b[0].max(), b[1].max()) for b in all_bands)
+    pad = 10.0 * T_eff
+    edges = np.linspace(e_lo - pad, e_hi + pad, n_bins + 1)
+    centers = 0.5 * (edges[:-1] + edges[1:])
+    dE = edges[1] - edges[0]
+ 
+    if dE > T_eff / 5.0:
+        print(
+            f"  Warning: energy bin width {dE*1e3:.4f} meV exceeds T_eff/5 = "
+            f"{T_eff/5*1e3:.4f} meV. Increase n_bins for accurate tables."
+        )
+ 
+    for a, (E0, E1) in enumerate(all_bands):
+        # Density of states per band (counts per bin, unnormalized)
+        H0, _ = np.histogram(E0.ravel(), bins=edges)
+        H1, _ = np.histogram(E1.ravel(), bins=edges)
+ 
+        # Drop empty bins: typically most of them, and this shrinks the
+        # inner loop considerably
+        nz0 = H0 > 0
+        nz1 = H1 > 0
+        c0, w0 = centers[nz0], H0[nz0].astype(float)
+        c1, w1 = centers[nz1], H1[nz1].astype(float)
+ 
+        for j, mu_j in enumerate(mu_table):
+            f0 = fermi_distrib(c0, mu_j, T_eff)          # electron occupation
+            g1 = 1.0 - fermi_distrib(c1, mu_j, T_eff)    # hole occupation
+ 
+            n_e = np.dot(w0, f0)
+            n_h = np.dot(w1, g1)
+            n_table[a, j] = conv * (n_e - n_h)
+ 
+            e_e = np.dot(w0, c0 * f0)
+            e_h = np.dot(w1, c1 * g1)
+            e_table[a, j] = conv * (e_e - e_h)
+ 
+        if not np.all(np.diff(n_table[a]) > 0):
+            raise RuntimeError(
+                f"Flavor {a}: n(mu) not strictly increasing. "
+                "Increase n_bins or widen [mu_min, mu_max]."
+            )
+ 
+    return mu_table, n_table, e_table
+
+def solve_scf_from_tables(
+    n_target, mu_table, n_table, U, area_uc, initial_n_flavs, max_iter=300, tolerance=1e-6, mixing=0.4
+):
+    """
+    Self-consistent mean-field calculation using interpolation tables. All four flavors are always active, a flavor that empties out does so on its own by acquiring a vanishing density.
+
+    The root finder bracket for the global Fermi Level is chosen so that mu_global - stays inside the tabulated mu range for every flavor. This avoids a plausible-looking but wrong solution produced by np.interp.
+
+    Parameters
+    ----------
+    n_target : float
+        Total carrier density [cm^-2].
+    mu_table : ndarray, shape (n_table_pts,)
+        Uniformly spaced mu points.
+    n_table : ndarray, shape (n_flavors, n_table_pts)
+        Tabulated flavor densities
+    U : float
+        Interaction amplitude [eV].
+    area_uc : float
+        Unit cell area [cm^2].
+    initial_n_flavs : array-like, shape (n_flavors,)
+        Seed densities. Must not be exactly the symmetric point to allow spontaneous polarization.
+    max_iter : int
+        Maximum SCF iterations.
+    tolerance : float
+        Convergence criterion for the SCF.
+    mixing : float
+        Linear mixing parameter.
+
+    Returns
+    -------
+    dict with keys 'n_flavs', 'V_flavs', 'mu_global', 'mu_flavs', 'converged', 'n_iter', or None if the root finder failed to bracket.
+    """
+    n_flavors = n_table.shape[0]
+    n_flavs = np.array(initial_n_flavs, dtype=float)
+
+    def total_density_residual(mu_global, V):
+        n_tot = 0.0
+        for a in range(n_flavors):
+            n_tot += np.interp(mu_global - V[a], mu_table, n_table[a])
+        return n_tot - n_target
+
+    converged = False
+    mu_global = np.nan
+    V_flavs = np.zeros(n_flavors)
+
+    for it in range(max_iter):
+        # Compute interaction potential
+        V_flavs = compute_mf_symmetric_potentials(n_flavs, U, area_uc)
+
+        # Keep mu_global - V_alpha inside the table for all alpha
+        lo = mu_table[0] + np.max(V_flavs)
+        hi = mu_table[-1] + np.min(V_flavs)
+        if lo >= hi:
+            return None
+
+        # Get mu_global satisfying the total density constraint
+        try:
+            mu_global = brentq(total_density_residual, lo, hi, args=(V_flavs,), xtol=1e-9)
+        except ValueError:
+            return None
+
+        # Update the densities
+        # n_(mu_alpha), with mu_alpha = mu_global - V_alpha
+        n_new = np.array([
+            np.interp(mu_global - V_flavs[a], mu_table, n_table[a])
+            for a in range(n_flavors)
+        ])
+
+        # Evaluate the error & Check convergence
+        rel_error = np.max(np.abs(n_new - n_flavs) / np.abs(n_target))
+
+        if rel_error < tolerance:
+            n_flavs = n_new
+            # Recompute V and mu with the final densities
+            V_flavs = compute_mf_symmetric_potentials(n_flavs, U, area_uc)
+            lo = mu_table[0] + np.max(V_flavs)
+            hi = mu_table[-1] + np.min(V_flavs)
+            try:
+                mu_global = brentq(total_density_residual, lo, hi, args=(V_flavs,), xtol=1e-11)
+            except ValueError:
+                return None
+            converged = True
+            break
+
+        # Linear mixing for next iteration
+        n_flavs = (1.0 - mixing) * n_flavs + mixing * n_new
+
+    return {
+        "n_flavs":   n_flavs,
+        "V_flavs":   V_flavs,
+        "mu_global": mu_global,
+        "mu_flavs":  mu_global - V_flavs,
+        "converged": converged,
+        "n_iter":    it + 1,
+    }
+
+def internal_energy_from_tables(n_flavs, mu_flavs, mu_table, e_table, U, area_uc):
+    """
+    Total internal energy E_int = E_kin + V_int for a converged configuration, evaluated by interpolation.
+
+    Parameters
+    ----------
+    n_flavs : ndarray, shape (n_flavors,)
+        Converged flavor densities.
+    mu_flavs : ndarray, shape (n_flavors,)
+        Converged flavor Fermi levels.
+    mu_table : ndarray, shape (n_table_pts,)
+        Uniformly spaced mu points.
+    n_table : ndarray, shape (n_flavors, n_table_pts)
+        Tabulated flavor densities
+    U : float
+        Interaction amplitude [eV].
+    area_uc : float
+        Unit cell area [cm^2].
+
+    Returns
+    -------
+    E_int : float
+        Total internal energy [eV cm^-2].
+    """
+    E_kin = sum(
+        np.interp(mu_flavs[a], mu_table, e_table[a])
+        for a in range(len(n_flavs))
+    )
+    V_int = V_int_SU4(n_flavs, U, area_uc)
+    return E_kin + V_int
+
+def count_occupied_flavors(n_flavs, threshold=1e6):
+    """
+    Count how many flavors carry a density above a magnitude threshold, separating actual occupation from thermal residue. The absolute value is used because carrier densities might be negative or positive.
+
+    Parameters
+    ----------
+    n_flavs : ndarray, shape (n_flavors,)
+        Converged flavor densities.
+    threshold : float
+        Magnitude below which a flavor counts as empty [cm^-2].
+
+    Returns
+    -------
+    int
+    """
+
+    return int(np.count_nonzero(np.abs(n_flavs) > threshold))
