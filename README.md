@@ -27,37 +27,69 @@ To capture the self-consistent polarization and gap state changes, the model inc
 
 ## Repository Structure
 
-* **`model/`**: Core physical implementation.
-  * [`model.py`](file:///home/martinpv/DIPC/multiferroic-rg/model/model.py): Defines the `McCannCarts` system class with Cartesian coordinate evaluations, analytic energy bands, eigenstates, and derivatives.
-  * [`analysis.py`](file:///home/martinpv/DIPC/multiferroic-rg/model/analysis.py): Implements functions to calculate the Fermi distribution, velocity matrix elements, Berry curvature, Quantum Metric Tensor, Quantum Metric Dipole (QMD), linear AHE conductivity, and density of states (DOS).
-  * [`config.py`](file:///home/martinpv/DIPC/multiferroic-rg/model/config.py): Global parameters (hoppings, temperature, valley indices, spin-valley gap splits, and onsite energy offsets).
+```
+multiferroic-rg/
+├── model/
+│   ├── model.py          # McCannCarts system class
+│   ├── config.py         # Global parameters
+│   └── analysis/         # Physics analysis package (split by topic)
+│       ├── __init__.py   # Re-exports all public symbols
+│       ├── utils.py      # Utility helpers (progress_bar)
+│       ├── kspace.py     # k-mesh, Fermi distribution, system construction
+│       ├── thermo.py     # DOS, flavor densities, kinetic energies
+│       ├── interactions.py  # SU(4) and anisotropic interaction potentials
+│       ├── meanfield.py  # Self-consistent mean-field (SCF) solvers
+│       ├── geometry.py   # QGT, quantum metric, Berry curvature, AHE, QMD
+│       ├── montecarlo.py # Monte Carlo ground-state search
+│       └── phases.py     # Phase diagram tables, SCF from tables, flavor counting
+├── scripts/
+│   ├── fixed_bands/      # Band structure with manually set gaps; DOS and carrier density
+│   ├── correlations/     # Mean-field calculations for electronic correlations
+│   └── transport/        # Transport signatures
+│       ├── ahe_scan_U.py        # AHE butterfly hysteresis scan
+│       ├── gao_scan_mu.py       # Gao NLT conductivity vs chemical potential
+│       ├── holder_scan_mu.py    # Holder NLT conductivity vs chemical potential
+│       └── qmd_scan_mu.py       # QMD conductivity vs chemical potential
+├── tests/                # Unit tests, shape verifications, debugging scripts
+├── figures/              # Generated plots (AHE, DOS, bands, QMD)
+└── data/                 # Calculated .npz data archives
+```
 
-* **`scripts/`**: Scripts for sweeps and visualizations.
-  * **`fixed_bands/`**: Building of the band structure with manually determined energy gaps and shifts to reproduce Huang's bands. Extracting the DOS and calculating the charge carrier density at a given Fermi level and vice-versa.
-  * **`correlations/`**: Performing mean-field calculations to characterize the effect of electronic correlations, giving the values of the energy gaps and shifts.
-  * **`transport/`**: Calculates different relevant transport signatures of the system, including the linear Anomalous Hall Effect butterfly hysteresis [`ahe_scan_U.py`] and the QMD's non-linear conductivity [`qmd_scan_mu.py`].
+### `model/analysis` package
 
-  <!-- * **AHE & Hysteresis**:
-    * [`ahe_scan_U.py`](file:///home/martinpv/DIPC/multiferroic-rg/scripts/ahe_scan_U.py) / [`ahe_scan_plot.py`](file:///home/martinpv/DIPC/multiferroic-rg/scripts/ahe_scan_plot.py): Simulates and plots the AHE butterfly hysteresis loops by scanning the interlayer potential $U$.
-  * **QMD & Nonlinear Conductivity**:
-    * [`qmd_scan_U.py`](file:///home/martinpv/DIPC/multiferroic-rg/scripts/qmd_scan_U.py) / [`qmd_scan_mu.py`](file:///home/martinpv/DIPC/multiferroic-rg/scripts/qmd_scan_mu.py): Scans QMD conductivity tensor elements as a function of $U$ or chemical potential $\mu$.
-  * **Bands & DOS**:
-    * [`bandplot.py`](file:///home/martinpv/DIPC/multiferroic-rg/scripts/bandplot.py) / [`dos_plot.py`](file:///home/martinpv/DIPC/multiferroic-rg/scripts/dos_plot.py): Plots dispersion relation surfaces and density of states. -->
+All public functions are re-exported through `model/analysis/__init__.py`, so existing code using `from model.analysis import <name>` continues to work unchanged.
 
-* **`tests/`**: Unit tests, shape verifications, and parameter debugging scripts.
-* **`figures/`**: Generated plots for AHE butterfly hysteresis, DOS, energy bands, and QMD sweeps.
-* **`data/`**: Calculated `.npz` data archives.
+| Sub-module | Contents |
+|---|---|
+| `utils` | `progress_bar` |
+| `kspace` | `get_kmesh`, `fermi_distrib`, `deriv_fermi_distrib`, `build_systems_with_displacement` |
+| `thermo` | `precompute_flavor_bands`, `get_dos`, `get_flavor_density_from_bands`, `get_flavor_mu_from_densities`, `get_flavor_dos`, `get_flavor_kinetic_energy_from_bands`, `get_part_density` |
+| `interactions` | `V_int_SU4`, `V_int_anisotropic`, `compute_mf_symmetric_potentials`, `compute_mf_anisotropic_potentials` |
+| `meanfield` | `solve_self_consistent_mean_field`, `solve_phase_mean_field` |
+| `geometry` | `velocity_element`, `get_QG_tensor_component`, `get_quantum_metric_component`, `get_Berry_curv`, `get_QG_tensor`, `get_quantum_metric`, `get_G_tensor`, `get_qmd`, `get_ahe`, `sym_decomp_cond`, `get_QGT_chunk`, `get_qm_from_qgt`, `get_bc_from_qgt`, `get_G_tensor_from_qgt`, `get_qmd_from_qgt`, `integrate_qmd_chunk` |
+| `montecarlo` | `sample_flavor_densities`, `build_density_interp_tables`, `evaluate_realizations`, `find_minimum_energy_configuration` |
+| `phases` | `build_density_and_energy_tables`, `build_tables_histogram`, `solve_scf_from_tables`, `internal_energy_from_tables`, `count_occupied_flavors`, `count_degenerate_flavors` |
 
 ---
 
 ## How to Run
 
-To run a scan of the Anomalous Hall conductivity vs interlayer potential $U$ and save the data:
+Scan the Anomalous Hall conductivity vs interlayer potential $U$:
 ```bash
-python scripts/ahe_scan_U.py
+python scripts/transport/ahe_scan_U.py
 ```
 
-To run a scan of the Quantum Metric Dipole (QMD) conductivity tensor elements:
+Scan the Quantum Metric Dipole (QMD) conductivity tensor vs chemical potential:
 ```bash
-python scripts/qmd_scan_U.py
+python scripts/transport/qmd_scan_mu.py
 ```
+
+---
+
+## Notes on Legacy Files
+
+The `_to_delete/` folder holds files that have been superseded and are pending removal:
+* `analysis.py` — flat module replaced by the `model/analysis/` package
+* `analysis_old.py` — early prototype; all functions present in the new package
+
+Scripts in `scripts/transport/` ending in `_fixed.py` and tests prefixed `nlt_*_single.py` or `test_nlt_*` used an old element-wise NLT API (`get_nlt_gao`, `get_nlt_holder`, `get_nlt_qmd`) that was removed when the code was modernised to use chunk-based integration. These files now raise `NotImplementedError` on execution; the current equivalents are the `*_scan_mu.py` scripts.

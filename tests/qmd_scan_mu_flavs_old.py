@@ -8,7 +8,7 @@ project_root = Path(__file__).resolve().parent.parent
 sys.path.append(str(project_root))
 
 from model.model import McCannCarts
-from model.analysis_old import get_kmesh, get_quantum_metric_component, deriv_fermi_distrib, sym_decomp_cond
+from model.analysis import get_kmesh, get_quantum_metric_component, deriv_fermi_distrib, sym_decomp_cond
 import model.config as config
 import gc
 

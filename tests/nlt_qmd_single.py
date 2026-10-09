@@ -7,16 +7,19 @@ project_root = Path(__file__).resolve().parent.parent
 sys.path.append(str(project_root))
 
 from model.model import McCannCarts
-from model.analysis import get_kmesh, get_nlt_qmd, sym_decomp_cond
+from model.analysis import get_kmesh, sym_decomp_cond
 import model.config as config
 
+
+# NOTE: get_nlt_qmd() was part of an old element-wise API that has been removed.
+# Use the chunk-based functions in scripts/transport/qmd_scan_mu.py instead.
 def test_qmd_conductivity():
     # Initialize the system with parameters from the configuration file
     system = McCannCarts(
         gamma0=config.GAMMA0,
         gamma1=config.GAMMA1,
-        valley_idx=config.XI,
-        Delta=config.DELTA,
+        valley_idx=config.VALLEY_IDX[0],
+        Delta=config.DELTAS[0, 0],
         N=config.N,
         gamma2=config.GAMMA2,
         gamma3=config.GAMMA3,
@@ -32,7 +35,7 @@ def test_qmd_conductivity():
 
     # Calculate QMD contribution to conductivity for band 0
     print(f"Calculating QMD conductivity for band {band_idx}...")
-    sigma_qmd = get_nlt_qmd(system, band_idx, p, config.T_eff, config.mu_eff)
+    sigma_qmd = (lambda *a, **kw: (_ for _ in ()).throw(NotImplementedError("get_nlt_qmd was removed – use the chunk-based API in scripts/transport/qmd_scan_mu.py")))(system, band_idx, p, config.T_eff, config.mu_eff)
 
     # Decompose in symmetry basis
     sigma_qmd_sym, sigma_qmd_asym = sym_decomp_cond(sigma_qmd)

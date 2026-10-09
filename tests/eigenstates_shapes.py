@@ -9,7 +9,9 @@ sys.path.append(str(project_root))
 
 from model.model import McCannCarts
 from model.analysis import get_kmesh
-from model.config import GAMMA0, GAMMA1, XI, N, DELTA, N_PTS, K_LIM
+from model.config import GAMMA0, GAMMA1, VALLEY_IDX, N, DELTAS, N_PTS, K_LIM
+XI = VALLEY_IDX[0]  # first valley (alias for single-valley tests)
+DELTA = DELTAS[0, 0]  # first valley up-spin gap (alias for single-valley tests)
 
 def main():
     # Build the system using McCannCarts and the imported parameters

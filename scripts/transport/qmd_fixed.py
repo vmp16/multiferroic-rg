@@ -3,9 +3,14 @@ import numpy as np
 from pathlib import Path
 
 from model.model import McCannCarts
-from model.analysis import get_kmesh, get_nlt_qmd, sym_decomp_cond
+from model.analysis import get_kmesh, sym_decomp_cond
 import model.config as config
 
+
+# DEPRECATED: get_nlt_qmd() was removed when the code was modernised to use
+# the chunk-based integration API.  See scripts/transport/qmd_scan_mu.py
+# for the current implementation.  This file will raise NotImplementedError
+# if run as-is.
 def get_conductivity_qmd(mu):
     # Build the kmesh
     KX, KY = get_kmesh(config.K_LIM, config.N_PTS)
@@ -43,8 +48,8 @@ def get_conductivity_qmd(mu):
         sigma_up = []
         sigma_dn = []
         for band_idx in range(2):
-            sigma_up.append(get_nlt_qmd(system_up, band_idx, p, config.T_eff, mu))
-            sigma_dn.append(get_nlt_qmd(system_dn, band_idx, p, config.T_eff, mu))
+            sigma_up.append((lambda *a, **kw: (_ for _ in ()).throw(NotImplementedError("get_nlt_qmd removed – see qmd_scan_mu.py")))(system_up, band_idx, p, config.T_eff, mu))
+            sigma_dn.append((lambda *a, **kw: (_ for _ in ()).throw(NotImplementedError("get_nlt_qmd removed – see qmd_scan_mu.py")))(system_dn, band_idx, p, config.T_eff, mu))
             
         # Sum contributions from all bands for each spin
         sigma_up_total = np.sum(sigma_up, axis=0)

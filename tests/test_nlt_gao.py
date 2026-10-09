@@ -7,9 +7,12 @@ project_root = Path(__file__).resolve().parent.parent
 sys.path.append(str(project_root))
 
 from model.model import McCannCarts
-from model.analysis import get_kmesh, get_nlt_gao, sym_decomp_cond
+from model.analysis import get_kmesh, sym_decomp_cond
 import model.config as config
 
+
+# NOTE: get_nlt_gao() was part of an old element-wise API that has been removed.
+# Use the chunk-based functions in scripts/transport/gao_scan_mu.py instead.
 def test_gao():
     # Initialize the system with parameters from the configuration file
     system = McCannCarts(

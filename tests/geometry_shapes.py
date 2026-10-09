@@ -14,8 +14,8 @@ def test_shapes():
     system = McCannCarts(
         gamma0=config.GAMMA0,
         gamma1=config.GAMMA1,
-        valley_idx=config.XI,
-        Delta=config.DELTA,
+        valley_idx=config.VALLEY_IDX[0],
+        Delta=config.DELTAS[0, 0],
         N=config.N,
         gamma2=config.GAMMA2,
         gamma3=config.GAMMA3,
