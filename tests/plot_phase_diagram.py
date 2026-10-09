@@ -13,7 +13,7 @@ from matplotlib.colors import ListedColormap, BoundaryNorm
 
 import model.config as config
 
-data = np.load(config.DATA_DIR / "phase_diagram_nD_80pts.npz")
+data = np.load(config.DATA_DIR / "phase_diagram_nD_150pts.npz")
 
 n_vals = data["n_vals"]
 n_pts = len(n_vals)
@@ -28,8 +28,8 @@ phase_map[phase_map < 0] = np.nan
 # ---------------------------------------------------------
 # Printing some configurations
 # ---------------------------------------------------------
-iD = 40
-iN = 36
+iD = 10
+iN = 15
 dens_print = density_map[iD, iN]
 print(f"Ground state for (n, D) = ({n_vals[iN]:.4e}, {D_vals[iD]*1e3:.2f}):")
 print("Densities: ", dens_print)
@@ -61,6 +61,7 @@ mesh = ax.pcolormesh(
     cmap=cmap, norm=norm, shading="flat",
 )
 
+# Highlight a point
 ax.plot(
     n_vals[iN], D_vals[iD]*1e3,
     marker="o", markersize=7,
@@ -89,13 +90,13 @@ cbar.ax.set_yticklabels([str(l) for l in levels])
 #     )
 # except Exception:
 #     pass    # contouring fails harmlessly if the map has no interior boundaries
-
+ 
 ax.ticklabel_format(axis="x", style="sci", scilimits=(0, 0))
 fig.tight_layout()
-
+ 
 config.FIGURES_DIR.mkdir(parents=True, exist_ok=True)
 out = config.FIGURES_DIR / f"phase_diagram_nD_{n_pts}pts.png"
 fig.savefig(out, dpi=300, bbox_inches="tight")
 print(f"Saved figure: {out}")
-
+ 
 plt.show()

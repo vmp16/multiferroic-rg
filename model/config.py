@@ -44,14 +44,30 @@ DELTA2DN = DELTA1UP
 DELTAS = np.array([[DELTA1UP, DELTA1DN],
                    [DELTA2UP, DELTA2DN]])
 
+# 17.46221686 -6.05748707 -6.05749938 17.46221686
 # On-site energies [eV]
-E0_1UP = 9.3248*1e-3
-E0_1DN = 0.0*1e-3
-E0_2UP = 0.0*1e-3
-E0_2DN = -14.4855*1e-3
+E0_1UP = -17.46221686*1e-3
+E0_1DN = 6.05749938*1e-3
+E0_2UP = 6.05749938*1e-3
+E0_2DN = -17.46221686*1e-3
 E0_ARRAY = np.array([[E0_1UP, E0_1DN],
                      [E0_2UP, E0_2DN]])
 
 # Interaction energy amplitudes
 U = 30.0              # eV
 J = 0.0 # - 0.3 * U       # eV
+
+# Possible phases considering partial polarizations
+PHASE_ORDER = [
+    "1",            # 1 flavor active, alone
+    "2",            # 2 active, equal
+    "1-1",          # 2 active, both distinct
+    "3",            # 3 active, all equal
+    "2-1",          # 3 active, 2 equal + 1 distinct
+    "1-1-1",        # 3 active, all distinct
+    "4",            # 4 active, fully symmetric
+    "3-1",          # 4 active, 3 equal + 1 distinct
+    "2-2",          # 4 active, two pairs
+    "2-1-1",        # 4 active, one pair + 2 distinct
+    "1-1-1-1",      # 4 active, all distinct
+]

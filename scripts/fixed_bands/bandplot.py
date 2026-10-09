@@ -6,7 +6,7 @@ from pathlib import Path
 from model.model import McCannCarts
 import model.config as config
 
-def plot_bands(mu_plot=0.0):
+def plot_bands(mu_plot=0.0, D=0.0):
     # Define k-path (along kx, ky=0)
     k_pts = 500
     kx = np.linspace(-config.K_LIM, config.K_LIM, k_pts)
@@ -31,7 +31,7 @@ def plot_bands(mu_plot=0.0):
             system = McCannCarts(
                 N=config.N,
                 valley_idx=xi,
-                Delta=config.DELTAS[v_idx, spin_idx],
+                Delta=D + config.DELTAS[v_idx, spin_idx],
                 gamma0=config.GAMMA0,
                 gamma1=config.GAMMA1,
                 gamma2=config.GAMMA2,
@@ -54,7 +54,7 @@ def plot_bands(mu_plot=0.0):
                 ls=spin_ls[spin_idx]
             )
 
-        ax.set_ylim(-25, 25)
+        ax.set_ylim(-50, 50)
         ax.set_xlim(-0.12, 0.12)
         ax.set_xticks([-0.1, 0, 0.1])
         # ax.set_yticks([-0.1, 0.0, 0.1])
@@ -72,4 +72,4 @@ def plot_bands(mu_plot=0.0):
     plt.show()
 
 if __name__ == "__main__":
-    plot_bands(mu_plot=0.0)
+    plot_bands(mu_plot=0.0, D=0.02)

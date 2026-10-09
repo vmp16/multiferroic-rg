@@ -27,6 +27,7 @@ from model.analysis import (
     solve_scf_from_tables,
     internal_energy_from_tables,
     count_occupied_flavors,
+    # count_degenerate_flavors,
 )
 
 # ===================================================
@@ -34,8 +35,8 @@ from model.analysis import (
 # ===================================================
 
 # --------- Diagram Axes ---------
-N_MIN, N_MAX, N_POINTS = -5.0e12, -1.0e10, 150    # carrier density [cm^-2]
-D_MIN, D_MAX, D_POINTS = 0.000, 0.050, 150    # displacement field [eV]
+N_MIN, N_MAX, N_POINTS = -4.0e12, -1.0e11, 60    # carrier density [cm^-2]
+D_MIN, D_MAX, D_POINTS = 0.000, 0.015, 60    # displacement field [eV]
 # TIP: symmetric in D, so we can just test positive values
 
 # --------- Phase Identification ---------
@@ -43,13 +44,13 @@ THRESHOLD = 1e6      # |n_alpha| above this counts as occupied [cm^-2]
 
 # --------- Grid (k-mesh) ---------
 # Deliberately coarser than config.N_PTS: the scan runs this thousands of times, and the table construction cost scales as N_PTS^2.
-N_PTS_SCAN = 2000
+N_PTS_SCAN = 1500
 K_LIM_SCAN = 0.15
 # Verify on a few isolated points that the phase boundaries are converged in N_PTS before trusting a low-resolution scan.
 
 # --------- Interpolation Tables ---------
-MU_MIN, MU_MAX = -0.30, 0.30    # must cover mu_global - V_alpha everywhere
-N_TABLE = 3000
+MU_MIN, MU_MAX = -0.20, 0.20    # must cover mu_global - V_alpha everywhere
+N_TABLE = 2000
 
 # --------- SCF Parameters ---------
 TOLERANCE = 1e-6
@@ -95,6 +96,7 @@ prefactor = (dk**2) / (2.0 * np.pi)**2
 
 # Result containers: rows = D, cols = n
 phase_map  = np.full((D_POINTS, N_POINTS), -1, dtype=int)     # -1 = failed
+degeneracy_map = np.full((D_POINTS, N_POINTS), -1, dtype=int)
 energy_map = np.full((D_POINTS, N_POINTS), np.nan)
 density_map = np.full((D_POINTS, N_POINTS, n_flavors), np.nan)
 mu_map     = np.full((D_POINTS, N_POINTS), np.nan)
@@ -176,11 +178,13 @@ for iD, D in enumerate(D_vals):
             continue
 
         # Update the result containers
-        phase_map[iD, iN]     = count_occupied_flavors(best["n_flavs"], THRESHOLD)
-        energy_map[iD, iN]    = best_E
-        density_map[iD, iN]   = best["n_flavs"]
-        mu_map[iD, iN]        = best["mu_global"]
-        conv_map[iD, iN]      = True
+        phase_map[iD, iN] = count_occupied_flavors(best["n_flavs"], THRESHOLD)
+        # n_degenerate, groups = count_degenerate_flavors(best["n_flavs"], tol=1e5)
+        # degeneracy_map[iD, iN] = n_degenerate
+        energy_map[iD, iN] = best_E
+        density_map[iD, iN] = best["n_flavs"]
+        mu_map[iD, iN] = best["mu_global"]
+        conv_map[iD, iN] = True
         n_prev = best["n_flavs"]
 
     # Print information for this row (one D value)
@@ -204,6 +208,7 @@ np.savez_compressed(
     n_vals=n_vals,
     D_vals=D_vals,
     phase_map=phase_map,
+    degeneracy_map=degeneracy_map,
     energy_map=energy_map,
     density_map=density_map,
     mu_map=mu_map,

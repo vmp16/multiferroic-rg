@@ -36,13 +36,13 @@ def calculate_total_part_dens(mu, U=0.0):
             n_flav_list.append(n_flav)
 
     # Sum all the flavors and convert to /cm^2
-    n_total = np.sum(n_flav_list) / (config.a**2) * 1e16
+    n_total = np.sum(n_flav_list) * config.unit_cell_to_cm2
 
     return n_total
 
 def main():
     mu = 0.0e-3        # in eV
-    U = 0.0
+    U = 20.0e-3
     print(f"Calculating total Particle Density at mu={mu*1e3} meV, U={U*1e3} meV...")
     n_total = calculate_total_part_dens(mu, U=U)
 

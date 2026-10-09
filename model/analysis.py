@@ -161,6 +161,80 @@ def get_flavor_density_from_bands(bands, mu_alpha, T_eff, prefactor, unit_cell_t
     
     return prefactor * np.sum(n_e - n_h) * unit_cell_to_cm2
 
+def get_flavor_mu_from_densities(n_flavs, all_bands, T_eff, prefactor, unit_cell_to_cm2, mu_min=-0.1, mu_max=0.1, xtol=1e-7, tables=None):
+    """
+    Invert n_alpha(mu) for each flavor: find the chemical potential mu_alpha that
+    yields the density n_alpha on the single-particle band structure of flavor alpha.
+
+    Flavor i of `n_flavs` is paired with `all_bands[i]`, so if fewer than 4 densities
+    are given, the first len(n_flavs) flavors are used (same convention as
+    solve_phase_mean_field).
+
+    Parameters
+    ----------
+    n_flavs : array-like, length 1 to 4
+        Flavor densities [cm^-2].
+    all_bands : list of (E0, E1) tuples
+        Precomputed band pairs, one per flavor (from precompute_flavor_bands).
+    T_eff : float
+        Thermal energy kB*T [eV].
+    prefactor : float
+        k-space integration prefactor dk^2 / (2*pi)^2.
+    unit_cell_to_cm2 : float
+        Conversion from unit-cell density to cm^-2.
+    mu_min, mu_max : float
+        Root-finder bracket [eV] (direct mode only).
+    xtol : float
+        Root-finder tolerance on mu [eV] (direct mode only).
+    tables : tuple (mu_table, n_table) or None
+        If given, mu_alpha is obtained by interpolating the tabulated n_alpha(mu)
+        (e.g. from build_density_and_energy_tables or build_tables_histogram).
+        Much faster, since it needs no k-sums. If None, each mu_alpha is found
+        with brentq on the exact k-mesh sum.
+
+    Returns
+    -------
+    mu_flavs : ndarray, shape (len(n_flavs),)
+        Flavor chemical potentials [eV].
+
+    Raises
+    ------
+    ValueError
+        If the input has more than 4 entries, more entries than available bands,
+        or if a density lies outside the bracket / table range.
+    """
+    n_flavs = np.atleast_1d(np.asarray(n_flavs, dtype=float))
+    if n_flavs.ndim != 1 or not (1 <= len(n_flavs) <= 4):
+        raise ValueError(f"n_flavs must be 1D with 1 to 4 entries, got shape {n_flavs.shape}.")
+    if len(n_flavs) > len(all_bands):
+        raise ValueError(f"{len(n_flavs)} densities given but only {len(all_bands)} band pairs available.")
+
+    mu_flavs = np.empty(len(n_flavs))
+
+    for a, n_a in enumerate(n_flavs):
+        if tables is not None:
+            mu_table, n_table = tables
+            if n_a < n_table[a, 0] or n_a > n_table[a, -1]:
+                raise ValueError(
+                    f"Flavor {a}: n = {n_a:.4e} cm^-2 outside the tabulated range "
+                    f"[{n_table[a, 0]:.4e}, {n_table[a, -1]:.4e}]."
+                )
+            mu_flavs[a] = np.interp(n_a, n_table[a], mu_table)
+        else:
+            def residual(mu):
+                return get_flavor_density_from_bands(
+                    all_bands[a], mu, T_eff, prefactor, unit_cell_to_cm2
+                ) - n_a
+            try:
+                mu_flavs[a] = brentq(residual, mu_min, mu_max, xtol=xtol)
+            except ValueError:
+                raise ValueError(
+                    f"Flavor {a}: n = {n_a:.4e} cm^-2 not bracketed by "
+                    f"mu in [{mu_min}, {mu_max}] eV."
+                )
+
+    return mu_flavs
+
 def get_flavor_dos(bands, mu_alpha, T_eff, prefactor, unit_cell_to_cm2):
     """
     Get the Density of States (DOS) of a given flavor up to a given value of energy mu_alpha.
@@ -554,6 +628,36 @@ def velocity_element(system, px, py, idx1, idx2, axis):
         # res = psi1_x* * dX * psi2_y + psi1_y* * dX* * psi2_x
         res = psi1_x * dX * psi2_y + psi1_y * np.conj(dX) * psi2_x
 
+    return res
+
+def get_QG_tensor_component(system, band_idx, px, py, i, j):
+    """
+    Calculate a single component (i, j) of the Quantum Geometry Tensor.
+    i, j can be 0 (x) or 1 (y).
+    Note: i, j mapping to McCannCarts axis: 0 -> 1 (x), 1 -> 0 (y)
+    """
+    if band_idx not in (0, 1):
+        return None
+    n_idx = 1 - band_idx
+
+    e0, e1 = system.get_energy(px, py)
+    dE_sq = (e0 - e1) ** 2
+    del e0, e1
+
+    # Vi_bn = <band_idx | v_i | n_idx>
+    # Vj_bn = <band_idx | v_j | n_idx>
+    # T_ij = Vi_bn * Vj_bn* / dE^2
+    
+    ax_i = 1 if i == 0 else 0
+    ax_j = 1 if j == 0 else 0
+
+    Vi_bn = velocity_element(system, px, py, band_idx, n_idx, ax_i)
+    if i == j:
+        res = np.abs(Vi_bn)**2 / dE_sq
+    else:
+        Vj_bn = velocity_element(system, px, py, band_idx, n_idx, ax_j)
+        res = Vi_bn * np.conj(Vj_bn) / dE_sq
+    
     return res
 
 def get_quantum_metric_component(system, band_idx, px, py, i, j):
@@ -1221,3 +1325,79 @@ def count_occupied_flavors(n_flavs, threshold=1e6):
     """
 
     return int(np.count_nonzero(np.abs(n_flavs) > threshold))
+
+
+def count_degenerate_flavors(n_flavs, phase_list, threshold=1e6, tol=1e5, rtol=None):
+    """
+    Classify a converged flavor configuration by the partition of its occupied densities into clusters of equal value.
+    Step 1: identify occupied flavors as |n_alpha| > threshold (same criterion as count_occupied_flavors).
+    Step 2: union-find the occupied densities only, merging two flavors whenever they are within tol (or rtol) of each other. This is transitive: if a~b and b~c, a and c end up in the same cluster even if not directly within tolerance of one another.
+    Step 3: read off the cluster sizes with np.unique_counts and sort them descending to build a canonical partition string, e.g. "2-1" for a 3-active configuration where two flavors share a density and the third is distinct.
+ 
+    Parameters
+    ----------
+    n_flavs : array-like, shape (n_flavors,)
+        Converged flavor densities [cm^-2].
+    threshold : float
+        Magnitude below which a flavor counts as empty (excluded from the
+        partition entirely) [cm^-2].
+    tol : float
+        Absolute tolerance for two active densities to be called equal.
+    rtol : float or None
+        If given, used instead of tol as a relative tolerance.
+ 
+    Returns
+    -------
+    partition_str : str
+        Canonical partition label, one of PHASE_ORDER. "0" if no flavor is occupied (should not occur under the "always >=1 active" assumption, but guarded against).
+    phase_index : int
+        Index of partition_str in PHASE_ORDER, ready to store in a numeric map for colormap lookup. -1 if partition_str == "0".
+    """
+    n_flavs = np.asarray(n_flavs, dtype=float)
+ 
+    active_idx = np.where(np.abs(n_flavs) > threshold)[0]
+    n_active = len(active_idx)
+
+    if n_active == 0:
+        return "0", -1
+ 
+    active_n = n_flavs[active_idx]
+ 
+    def close(i, j):
+        if rtol is not None:
+            scale = max(abs(active_n[i]), abs(active_n[j]))
+            return abs(active_n[i] - active_n[j]) <= rtol * scale
+        return abs(active_n[i] - active_n[j]) <= tol
+ 
+    parent = list(range(n_active))
+ 
+    def find(i):
+        while parent[i] != i:
+            parent[i] = parent[parent[i]]
+            i = parent[i]
+        return i
+ 
+    def union(i, j):
+        ri, rj = find(i), find(j)
+        if ri != rj:
+            parent[rj] = ri
+ 
+    for i in range(n_active):
+        for j in range(i + 1, n_active):
+            if close(i, j):
+                union(i, j)
+ 
+    # Fully flatten, then let unique_counts do the bucketing in one shot
+    # This is just an initialization, giving parent_arr = [0, 1, ..., n_active - 1]
+    parent_arr = np.array([find(i) for i in range(n_active)])
+ 
+    # np.unique_counts requires NumPy >= 2.0; fall back to the classic np.unique(..., return_counts=True) if unavailable.
+    if hasattr(np, "unique_counts"):
+        counts = np.unique_counts(parent_arr).counts
+    else:
+        _, counts = np.unique(parent_arr, return_counts=True)
+ 
+    counts = np.sort(counts)[::-1]     # descending, e.g. [2, 1]
+    partition_str = "-".join(str(c) for c in counts)
+ 
+    return partition_str, phase_list[partition_str]
