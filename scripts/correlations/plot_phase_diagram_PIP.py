@@ -22,6 +22,7 @@ D_vals = data["D_vals"]
 phase_map = data["phase_map"].astype(float)
 density_map = data["density_map"]
 threshold = float(data["threshold"])
+k_lim_scan = float(data["k_lim_scan"])
 
 # Failed points -> NaN so they render as blank rather than as a phase
 phase_map[phase_map < 0] = np.nan
@@ -29,8 +30,8 @@ phase_map[phase_map < 0] = np.nan
 # ---------------------------------------------------------
 # Printing some configurations
 # ---------------------------------------------------------
-iD = 3
-iN = 150
+iD = 7
+iN = 10
 dens_print = density_map[iD, iN]
 print(f"Ground state for (n, D) = ({n_vals[iN]:.4e}, {D_vals[iD]*1e3:.2f}):")
 print("   Densities: ", dens_print)
@@ -98,8 +99,8 @@ ax.ticklabel_format(axis="x", style="sci", scilimits=(0, 0))
 fig.tight_layout()
  
 config.FIGURES_DIR.mkdir(parents=True, exist_ok=True)
-out = config.FIGURES_DIR / f"phase_diagram_nD_{n_pts}pts.png"
-# fig.savefig(out, dpi=300, bbox_inches="tight")
-# print(f"Saved figure: {out}")
+out = config.FIGURES_DIR / f"phase_diagram_nD_{n_pts}pts_klim{k_lim_scan}.png"
+fig.savefig(out, dpi=300, bbox_inches="tight")
+print(f"Saved figure: {out}")
  
 plt.show()

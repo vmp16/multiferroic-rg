@@ -10,17 +10,20 @@ from model.analysis import (
 )
 
 # -------- Load Data File --------
-filename = "phase_diagram_nD_170pts.npz"
+filename = "phase_diagram_nD_PIP_170pts.npz"
 
 with np.load(config.DATA_DIR / filename, allow_pickle=True) as f:
     data = {key: f[key] for key in f.files}
 
 n_vals = data["n_vals"]
-n_pts = len(n_vals)
 D_vals = data["D_vals"]
+n_pts = len(n_vals)
+d_pts = len(D_vals)
 density_map = data["density_map"]
 phase_map = data["phase_map"]
 phase_labels = data["phase_labels"]
+# phase_labels = np.full((d_pts, n_pts), "", dtype=object)    # USE THIS IF THERE IS NO "phase_labels" IN data
+
 
 new_phase_map = phase_map
 new_phase_labels = phase_labels

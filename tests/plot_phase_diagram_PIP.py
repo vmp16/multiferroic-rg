@@ -1,10 +1,9 @@
 """
-plot_phase_diagram.py
+plot_phase_diagram_PIP.py
 =====================
-Render the (n, D) phase diagram saved by scan_phase_diagram.py.
+Render the (n, D) phase diagram saved by scan_phase_diagram_PIP.py.
 
-Kept separate from the scan so the figure can be restyled without
-recomputing anything.
+Kept separate from the scan so the figure can be restyled without recomputing anything.
 """
 
 import numpy as np
@@ -14,7 +13,7 @@ from matplotlib.colors import BoundaryNorm
 
 import model.config as config
 
-data = np.load(config.DATA_DIR / "phase_diagram_nD_PIP_170pts.npz")
+data = np.load(config.DATA_DIR / "phase_diagram_nD_150pts.npz")
 
 n_vals = data["n_vals"]
 n_pts = len(n_vals)
@@ -22,6 +21,7 @@ D_vals = data["D_vals"]
 phase_map = data["phase_map"].astype(float)
 density_map = data["density_map"]
 threshold = float(data["threshold"])
+k_lim_scan = float(data["k_lim_scan"])
 
 # Failed points -> NaN so they render as blank rather than as a phase
 phase_map[phase_map < 0] = np.nan
@@ -29,8 +29,8 @@ phase_map[phase_map < 0] = np.nan
 # ---------------------------------------------------------
 # Printing some configurations
 # ---------------------------------------------------------
-iD = 80
-iN = 125
+iD = 60
+iN = 27
 dens_print = density_map[iD, iN]
 print(f"Ground state for (n, D) = ({n_vals[iN]:.4e}, {D_vals[iD]*1e3:.2f}):")
 print("   Densities: ", dens_print)
@@ -98,7 +98,7 @@ ax.ticklabel_format(axis="x", style="sci", scilimits=(0, 0))
 fig.tight_layout()
  
 config.FIGURES_DIR.mkdir(parents=True, exist_ok=True)
-out = config.FIGURES_DIR / f"phase_diagram_nD_{n_pts}pts.png"
+out = config.FIGURES_DIR / f"phase_diagram_nD_{n_pts}pts_klim{k_lim_scan}.png"
 # fig.savefig(out, dpi=300, bbox_inches="tight")
 # print(f"Saved figure: {out}")
  

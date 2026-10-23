@@ -11,9 +11,9 @@ from model.analysis import (
 )
 
 # =========== Parameters ===========
-D = 1.24e-3               # fixed displacement field [eV]
+D = 20.1342-3               # fixed displacement field [eV]
 n_flavs = np.array([       # flavor densities [cm^-2]
-    -9.08349958e+11,  6.09533180e+11, -9.08349629e+11,  6.09533271e+11
+    -1.02394384e+12, -1.02394024e+12, -1.02394387e+12, -1.02394387e+12
 ])
 n_tot = np.sum(n_flavs)
 
@@ -33,7 +33,8 @@ all_bands = precompute_flavor_bands(systems, KX, KY)
 
 # =========== Flavor chemical potentials ===========
 mu_flavs = get_flavor_mu_from_densities(
-    n_flavs, all_bands, config.T_eff, prefactor, config.unit_cell_to_cm2
+    n_flavs, all_bands, config.T_eff, prefactor, config.unit_cell_to_cm2,
+    # mu_min=-0.5, mu_max=0.2,
 )
 print(f"Found mu_alpha (meV): {mu_flavs*1e3}")
 

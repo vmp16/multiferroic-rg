@@ -1,18 +1,15 @@
 """
-scan_phase_diagram.py
+scan_phase_diagram_PIP.py
 =====================
 Build a phase diagram in the (n, D) plane.
 
 Loop ordering
 -------------
-The bands depend on D only, so D is the OUTER loop: bands and the
-mu-interpolation tables are rebuilt once per D value and reused for every
-n in the inner loop.
+The bands depend on D only, so D is the OUTER loop: bands and the mu-interpolation tables are rebuilt once per D value and reused for every n in the inner loop.
 
 Output
 ------
-A compressed .npz in config.DATA_DIR containing the grids, the flavor
-counts, the full converged densities and the internal energies.
+A compressed .npz in config.DATA_DIR containing the grids, the flavor counts, the full converged densities and the internal energies.
 """
 
 import numpy as np
@@ -22,8 +19,8 @@ import model.config as config
 from model.analysis import (
     get_kmesh,
     build_systems_with_displacement,
-    precompute_flavor_bands,
-    build_density_and_energy_tables,
+    build_tables_unique,
+    get_or_build_tables,
     solve_scf_from_tables,
     internal_energy_from_tables,
     count_degenerate_flavors,
@@ -45,13 +42,13 @@ PHASE_TO_INDEX = {label: i for i, label in enumerate(config.PHASE_ORDER)}
 
 # --------- Grid (k-mesh) ---------
 # Deliberately coarser than config.N_PTS: the scan runs this thousands of times, and the table construction cost scales as N_PTS^2.
-N_PTS_SCAN = 1500
-K_LIM_SCAN = 0.15
+N_PTS_SCAN = 5000
+K_LIM_SCAN = 0.20
 # Verify on a few isolated points that the phase boundaries are converged in N_PTS before trusting a low-resolution scan.
 
 # --------- Interpolation Tables ---------
-MU_MIN, MU_MAX = -0.20, 0.20    # must cover mu_global - V_alpha everywhere
-N_TABLE = 2000
+MU_MIN, MU_MAX = -0.25, 0.25    # must cover mu_global - V_alpha everywhere
+N_TABLE = 3000
 
 # --------- SCF Parameters ---------
 TOLERANCE = 1e-7
@@ -91,7 +88,7 @@ D_vals = np.linspace(D_MIN, D_MAX, D_POINTS)
 n_flavors = 4
 
 # k-space grid
-KX, KY = get_kmesh(config.K_LIM, N_PTS_SCAN)
+KX, KY = get_kmesh(K_LIM_SCAN, N_PTS_SCAN)
 dk = KX[0, 1] - KX[0, 0]
 prefactor = (dk**2) / (2.0 * np.pi)**2
 
@@ -120,21 +117,25 @@ t_start = time.time()
 for iD, D in enumerate(D_vals):
     t_row = time.time()
 
-    # Get the energy bands
-    systems, base_deltas = build_systems_with_displacement(D, config)
-    all_bands = precompute_flavor_bands(systems, KX, KY)
+    # Build the systems
+    # systems, base_deltas = build_systems_with_displacement(D, config)
 
     # Build the tables for interpolation
     try:
-        mu_table, n_table, e_table = build_density_and_energy_tables(
-            all_bands, config.T_eff, prefactor, config.unit_cell_to_cm2,
-            mu_min=MU_MIN, mu_max=MU_MAX, n_table_pts=N_TABLE,
+        # mu_table, n_table, e_table = build_tables_unique(
+        #     systems, KX, KY, config.T_eff, prefactor, config.unit_cell_to_cm2,
+        #     mu_min=MU_MIN, mu_max=MU_MAX, n_table_pts=N_TABLE,
+        # )
+        
+        mu_table, n_table, e_table = get_or_build_tables(
+            D, config, KX, KY, cache_dir=config.DATA_DIR / "tables_cache", mu_min=MU_MIN, mu_max=MU_MAX, n_table_pts=N_TABLE,
         )
+
     except RuntimeError as exc:
         print(f"  [D = {D*1e3:+.2f} meV] table build failed: {exc}")
         continue
 
-    del all_bands, systems      # free the band arrays before the inner loop
+    # del systems      # free the band arrays before the inner loop
 
     # ===================================================
     #               INNER LOOP OVER n
@@ -202,10 +203,11 @@ for iD, D in enumerate(D_vals):
 # ===================================================
 
 config.DATA_DIR.mkdir(parents=True, exist_ok=True)
-out_path = config.DATA_DIR / f"phase_diagram_nD_PIP_{N_POINTS}pts.npz"
+out_path = config.DATA_DIR / f"phase_diagram_nD_{N_POINTS}pts_klim{K_LIM_SCAN}_tables.npz"
 
 np.savez_compressed(
     out_path,
+    # Phase Diagram
     n_vals=n_vals,
     D_vals=D_vals,
     phase_map=phase_map,
@@ -214,11 +216,22 @@ np.savez_compressed(
     density_map=density_map,
     mu_map=mu_map,
     conv_map=conv_map,
+    # Phase Identification Params
     threshold=THRESHOLD,
+    phase_rtol=PHASE_RTOL,
+    # K-mesh Params
     n_pts_scan=N_PTS_SCAN,
     k_lim_scan=K_LIM_SCAN,
+    # Tables Params
+    n_table=N_TABLE,
+    mu_min=MU_MIN,
+    mu_max=MU_MAX,
+    # Thermo Params
     U=config.U,
     T_eff=config.T_eff,
+    # SCF Params
+    tolerance=TOLERANCE,
+    mixing=MIXING,
 )
 
 n_failed = np.count_nonzero(phase_map < 0)

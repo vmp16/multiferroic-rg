@@ -10,10 +10,12 @@ get_flavor_mu_from_densities
 get_flavor_dos
 get_flavor_kinetic_energy_from_bands
 get_part_density
+get_fermi_pockets
 """
 
 import numpy as np
 from scipy.optimize import brentq
+from scipy import ndimage
 
 from .kspace import fermi_distrib, deriv_fermi_distrib
 
@@ -25,6 +27,7 @@ __all__ = [
     "get_flavor_dos",
     "get_flavor_kinetic_energy_from_bands",
     "get_part_density",
+    "get_fermi_pockets",
 ]
 
 
@@ -198,3 +201,123 @@ def get_part_density(system, px, py, T, mu):
     
     # Unit factor set to 1.0 to retain the original [states / unit cell] return value
     return get_flavor_density_from_bands(bands, mu, T, prefactor, unit_cell_to_cm2=1.0)
+
+
+def get_fermi_pockets(bands, mu, KX, KY, dk, unit_cell_to_cm2,
+                      min_pixels=20, connectivity=1):
+    """
+    Identify and measure the Fermi pockets of one flavor on the 2D k-mesh.
+
+    One pocket = one closed Fermi contour. Each contour encloses a region of k-space and has a character:
+      - Outer contour of a region E0 < mu            -> electron pocket (+)
+      - Outer contour of a region E1 > mu            -> hole pocket (-)
+      - Contour of a hole inside such a region       -> pocket of the OPPOSITE
+        character (e.g. a ring-shaped hole region gives an outer hole pocket
+        and an inner electron-like pocket).
+    The inner pocket is "electron-like" in the sense that it encloses occupied states of the valence band, not conduction-band electrons.
+
+    Each pocket's area is the area ENCLOSED by its contour, so nested pockets overlap (the outer one includes the inner one). The net carrier area of a ring is area_outer - area_inner, which is exactly what the signed densities n_cm2 add up to. T -> 0 definition (sharp Fermi step).
+
+    Connectivity: foreground regions use `connectivity` (1 = 4-neighbour, 2 = 8-neighbour) and holes use the dual one (3 - connectivity), so that closed contours are topologically consistent.
+
+    Parameters
+    ----------
+    bands : tuple (E0, E1)
+        Upper and lower band energies on the 2D mesh [eV].
+    mu : float
+        Flavor chemical potential mu_alpha [eV].
+    KX, KY : ndarray
+        2D k-mesh (same shape as the bands).
+    dk : float
+        Mesh spacing.
+    unit_cell_to_cm2 : float
+        Conversion from unit-cell density to cm^-2.
+    min_pixels : int
+        Pockets enclosing fewer mesh points than this are discarded as noise.
+    connectivity : 1 or 2
+
+    Returns
+    -------
+    pockets : list of dict, sorted by enclosed area (largest first)
+        id, kind ('electron'/'hole'), inner (True if it is a hole inside another pocket), parent (id of the smallest enclosing pocket, or None), area [(1/a)^2] enclosed, frac (area / total_area), center (kx, ky) of the enclosed region, n_cm2 (signed density: electron > 0, hole < 0), touches_edge (outer contour reaches the mesh boundary: truncated).
+    label_map : ndarray of int32
+        0 = no pocket. Nested pockets are painted from large to small, so a ring has the outer id on the ring and the inner id on its hole.
+    total_area : float
+        Sum of the enclosed areas of all pockets (nested ones counted in full).
+    """
+    E0, E1 = bands
+    st_fg = ndimage.generate_binary_structure(2, connectivity)
+    st_bg = ndimage.generate_binary_structure(2, 3 - connectivity)
+
+    contours = []
+    for kind, mask, sign in (("electron", E0 < mu, +1.0), ("hole", E1 > mu, -1.0)):
+        if not mask.any():
+            continue
+        lab, _ = ndimage.label(mask, structure=st_fg)
+        border = set(np.unique(np.concatenate(
+            [lab[0, :], lab[-1, :], lab[:, 0], lab[:, -1]])).tolist()) - {0}
+
+        for i, sl in enumerate(ndimage.find_objects(lab), start=1):
+            comp = lab[sl] == i
+            filled = ndimage.binary_fill_holes(comp, structure=st_bg)
+            if filled.sum() < min_pixels:
+                continue
+
+            # Outer contour: encloses the component with its holes filled
+            contours.append(dict(kind=kind, sign=sign, inner=False, sl=sl,
+                                 mask=filled, touches_edge=(i in border)))
+
+            # Inner contours: one per hole (islands inside a hole stay enclosed)
+            holes, n_h = ndimage.label(filled & ~comp, structure=st_bg)
+            for j in range(1, n_h + 1):
+                hmask = holes == j
+                if hmask.sum() < min_pixels:
+                    continue
+                contours.append(dict(
+                    kind="hole" if kind == "electron" else "electron",
+                    sign=-sign, inner=True, sl=sl, mask=hmask, touches_edge=False))
+        del lab
+
+    # Largest first: ids follow enclosed area, and painting nests correctly
+    contours.sort(key=lambda c: int(c["mask"].sum()), reverse=True)
+    label_map = np.zeros(E0.shape, dtype=np.int32)
+    for idx, c in enumerate(contours, start=1):
+        c["id"] = idx
+        c["area_px"] = int(c["mask"].sum())
+        label_map[c["sl"]][c["mask"]] = idx
+
+    # Parent = smallest strictly larger pocket whose enclosed region contains it
+    for c in contours:
+        r, q = np.argwhere(c["mask"])[0]
+        r += c["sl"][0].start
+        q += c["sl"][1].start
+        c["parent"] = None
+        for d in reversed(contours):            # smallest first
+            if d["id"] == c["id"] or d["area_px"] <= c["area_px"]:
+                continue
+            rr, qq = r - d["sl"][0].start, q - d["sl"][1].start
+            if (0 <= rr < d["mask"].shape[0] and 0 <= qq < d["mask"].shape[1]
+                    and d["mask"][rr, qq]):
+                c["parent"] = d["id"]
+                break
+
+    pockets = []
+    for c in contours:
+        area = c["area_px"] * dk**2
+        pockets.append({
+            "id": c["id"],
+            "kind": c["kind"],
+            "inner": c["inner"],
+            "parent": c["parent"],
+            "area": area,
+            "center": (float(KX[c["sl"]][c["mask"]].mean()),
+                       float(KY[c["sl"]][c["mask"]].mean())),
+            "n_cm2": c["sign"] * area / (2 * np.pi)**2 * unit_cell_to_cm2,
+            "touches_edge": c["touches_edge"],
+        })
+
+    total_area = sum(p["area"] for p in pockets)
+    for p in pockets:
+        p["frac"] = p["area"] / total_area if total_area > 0 else np.nan
+
+    return pockets, label_map, total_area

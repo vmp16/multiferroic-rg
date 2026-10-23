@@ -67,8 +67,8 @@ def plot_bands(mu_plot = 0.0, U=0.0):
 
     # Save the figure
     output_path = config.FIGURES_DIR / f'bandstructure_U{U}.png'
-    plt.savefig(output_path, dpi=300)
-    print(f"Plot saved to {output_path}")
+    # plt.savefig(output_path, dpi=300)
+    # print(f"Plot saved to {output_path}")
     plt.show()
 
 if __name__ == "__main__":

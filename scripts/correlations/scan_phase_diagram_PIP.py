@@ -20,7 +20,7 @@ from model.analysis import (
     get_kmesh,
     build_systems_with_displacement,
     precompute_flavor_bands,
-    build_density_and_energy_tables,
+    build_tables_unique,
     solve_scf_from_tables,
     internal_energy_from_tables,
     count_degenerate_flavors,
@@ -88,7 +88,7 @@ D_vals = np.linspace(D_MIN, D_MAX, D_POINTS)
 n_flavors = 4
 
 # k-space grid
-KX, KY = get_kmesh(config.K_LIM, N_PTS_SCAN)
+KX, KY = get_kmesh(K_LIM_SCAN, N_PTS_SCAN)
 dk = KX[0, 1] - KX[0, 0]
 prefactor = (dk**2) / (2.0 * np.pi)**2
 
@@ -117,21 +117,20 @@ t_start = time.time()
 for iD, D in enumerate(D_vals):
     t_row = time.time()
 
-    # Get the energy bands
+    # Build the systems
     systems, base_deltas = build_systems_with_displacement(D, config)
-    all_bands = precompute_flavor_bands(systems, KX, KY)
 
     # Build the tables for interpolation
     try:
-        mu_table, n_table, e_table = build_density_and_energy_tables(
-            all_bands, config.T_eff, prefactor, config.unit_cell_to_cm2,
+        mu_table, n_table, e_table = build_tables_unique(
+            systems, KX, KY, config.T_eff, prefactor, config.unit_cell_to_cm2,
             mu_min=MU_MIN, mu_max=MU_MAX, n_table_pts=N_TABLE,
         )
     except RuntimeError as exc:
         print(f"  [D = {D*1e3:+.2f} meV] table build failed: {exc}")
         continue
 
-    del all_bands, systems      # free the band arrays before the inner loop
+    del systems      # free the band arrays before the inner loop
 
     # ===================================================
     #               INNER LOOP OVER n

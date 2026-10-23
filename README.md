@@ -88,8 +88,4 @@ python scripts/transport/qmd_scan_mu.py
 
 ## Notes on Legacy Files
 
-The `_to_delete/` folder holds files that have been superseded and are pending removal:
-* `analysis.py` — flat module replaced by the `model/analysis/` package
-* `analysis_old.py` — early prototype; all functions present in the new package
-
 Scripts in `scripts/transport/` ending in `_fixed.py` and tests prefixed `nlt_*_single.py` or `test_nlt_*` used an old element-wise NLT API (`get_nlt_gao`, `get_nlt_holder`, `get_nlt_qmd`) that was removed when the code was modernised to use chunk-based integration. These files now raise `NotImplementedError` on execution; the current equivalents are the `*_scan_mu.py` scripts.

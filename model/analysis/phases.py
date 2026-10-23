@@ -4,8 +4,6 @@ and flavor counting / classification.
 
 Functions
 ---------
-build_density_and_energy_tables
-build_tables_histogram
 solve_scf_from_tables
 internal_energy_from_tables
 count_occupied_flavors
@@ -20,164 +18,11 @@ from .thermo import get_flavor_density_from_bands, get_flavor_kinetic_energy_fro
 from .interactions import compute_mf_symmetric_potentials, V_int_SU4
 
 __all__ = [
-    "build_density_and_energy_tables",
-    "build_tables_histogram",
     "solve_scf_from_tables",
     "internal_energy_from_tables",
     "count_occupied_flavors",
     "count_degenerate_flavors",
 ]
-
-
-def build_density_and_energy_tables(all_bands, T_eff, prefactor, unit_cell_to_cm2, mu_min=-0.1, mu_max=0.1, n_table_pts=2000):
-    """
-    Build tabulated tables of n_alpha(mu) and E_kin,alpha(mu) for every flavor on a common mu grid,
-    to be used inverted through interpolation.
-
-    Parameters
-    ----------
-    all_bands : list of (E0, E1) tuples, len = n_flavors
-        Precomputed band pairs for each flavor.
-    T_eff : float
-        Thermal energy kB*T [eV].
-    prefactor : float
-        k-space integration prefactor (dk^2 / (2*pi^2))
-    unit_cell_to_cm2 : float
-        Conversion factor from unit-cell units to cm^-2.
-    mu_min, mu_max : float, optional
-        Limits of the chemical potential bracket [eV].
-    n_table_pts : int
-        Number of points in the mu_grid, increase for higher interpolation accuracy.
-
-    Returns
-    -------
-    mu_table : ndarray, shape (n_table_pts,)
-        Uniformly spaced mu points.
-    n_table : ndarray, shape (n_flavors, n_table_pts)
-        Flavor densities evaluated at each mu point.
-    e_table : ndarray, shape (n_flavors, n_table_pts)
-        Flavor kinetic energies at each mu point [eV cm^-2].
-
-    Raises
-    ------
-    RuntimeError
-        If n_flav(mu) is not strictly monotone for any flavor, which would make the inversion via np.interp invalid.
-    """
-    n_flavors = len(all_bands)
-    mu_table = np.linspace(mu_min, mu_max, n_table_pts)
-    n_table = np.zeros((n_flavors, n_table_pts))
-    e_table = np.zeros((n_flavors, n_table_pts))
-
-    for a, flav_bands in enumerate(all_bands):
-        for j, mu_j in enumerate(mu_table):
-            n_table[a, j] = get_flavor_density_from_bands(
-                flav_bands, mu_j, T_eff, prefactor, unit_cell_to_cm2
-            )
-            e_table[a, j] = get_flavor_kinetic_energy_from_bands(
-                flav_bands, mu_j, T_eff, prefactor, unit_cell_to_cm2
-            )
-        # Sanity check: n_flav(mu) must be strictly monotone for np.interp to be valid.
-        # A non-monotone table would silently produce wrong results.
-        if not np.all(np.diff(n_table[a]) > 0):
-            raise RuntimeError(
-                f"Flavor {a}: n_flav(mu) is not strictly increasing on [{mu_min}, {mu_max}]. "
-                "Widen the bracket or check the band structure."
-            )
-    return mu_table, n_table, e_table
-
-
-def build_tables_histogram(
-    all_bands, T_eff, prefactor, unit_cell_to_cm2,
-    mu_min=-0.30, mu_max=0.30, n_table_pts=3000, n_bins=60000,
-):
-    """
-    Build n_alpha(mu) and E_kin,alpha(mu) tables by histogramming the band
-    energies once and convolving with the Fermi function.
- 
-    The direct approach evaluates a full k-mesh sum at every mu, costing
-    O(N_mu * N_k).  But the summand depends on k only through the band
-    energy, so binning the energies into a density of states and then
-    convolving costs O(N_k + N_mu * N_bins) instead - typically two orders
-    of magnitude faster for a 1500^2 mesh.
- 
-    Accuracy is controlled by the bin width, which must be small compared
-    to the thermal smearing: aim for dE <~ T_eff / 5.  The function warns
-    if that is not satisfied.
- 
-    Parameters
-    ----------
-    all_bands : list of (E0, E1) tuples
-        Precomputed band pairs, one per flavor.
-    T_eff : float
-        Thermal energy kB*T [eV].
-    prefactor : float
-        k-space integration prefactor dk^2 / (2*pi)^2.
-    unit_cell_to_cm2 : float
-        Conversion from unit-cell density to cm^-2.
-    mu_min, mu_max : float
-        Bounds of the mu grid [eV].
-    n_table_pts : int
-        Number of mu samples.
-    n_bins : int
-        Number of energy bins for the histograms.
- 
-    Returns
-    -------
-    mu_table : ndarray, shape (n_table_pts,)
-    n_table  : ndarray, shape (n_flavors, n_table_pts)
-    e_table  : ndarray, shape (n_flavors, n_table_pts)
-    """
-    n_flavors = len(all_bands)
-    mu_table = np.linspace(mu_min, mu_max, n_table_pts)
-    n_table = np.zeros((n_flavors, n_table_pts))
-    e_table = np.zeros((n_flavors, n_table_pts))
- 
-    conv = prefactor * unit_cell_to_cm2
- 
-    # Common energy range across all flavors and both bands
-    e_lo = min(min(b[0].min(), b[1].min()) for b in all_bands)
-    e_hi = max(max(b[0].max(), b[1].max()) for b in all_bands)
-    pad = 10.0 * T_eff
-    edges = np.linspace(e_lo - pad, e_hi + pad, n_bins + 1)
-    centers = 0.5 * (edges[:-1] + edges[1:])
-    dE = edges[1] - edges[0]
- 
-    if dE > T_eff / 5.0:
-        print(
-            f"  Warning: energy bin width {dE*1e3:.4f} meV exceeds T_eff/5 = "
-            f"{T_eff/5*1e3:.4f} meV. Increase n_bins for accurate tables."
-        )
- 
-    for a, (E0, E1) in enumerate(all_bands):
-        # Density of states per band (counts per bin, unnormalized)
-        H0, _ = np.histogram(E0.ravel(), bins=edges)
-        H1, _ = np.histogram(E1.ravel(), bins=edges)
- 
-        # Drop empty bins: typically most of them, and this shrinks the inner loop considerably
-        nz0 = H0 > 0
-        nz1 = H1 > 0
-        c0, w0 = centers[nz0], H0[nz0].astype(float)
-        c1, w1 = centers[nz1], H1[nz1].astype(float)
- 
-        for j, mu_j in enumerate(mu_table):
-            f0 = fermi_distrib(c0, mu_j, T_eff)          # electron occupation
-            g1 = 1.0 - fermi_distrib(c1, mu_j, T_eff)    # hole occupation
- 
-            n_e = np.dot(w0, f0)
-            n_h = np.dot(w1, g1)
-            n_table[a, j] = conv * (n_e - n_h)
- 
-            e_e = np.dot(w0, c0 * f0)
-            e_h = np.dot(w1, c1 * g1)
-            e_table[a, j] = conv * (e_e - e_h)
- 
-        if not np.all(np.diff(n_table[a]) > 0):
-            raise RuntimeError(
-                f"Flavor {a}: n(mu) not strictly increasing. "
-                "Increase n_bins or widen [mu_min, mu_max]."
-            )
- 
-    return mu_table, n_table, e_table
 
 
 def solve_scf_from_tables(

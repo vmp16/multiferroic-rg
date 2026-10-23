@@ -12,7 +12,7 @@ def plot_bands(mu_plot=0.0, D=0.0):
     kx = np.linspace(-config.K_LIM, config.K_LIM, k_pts)
     ky = np.zeros_like(kx)
 
-    fig, axes = plt.subplots(1, 2, figsize=(7, 4), sharex=True, sharey=True)
+    fig, axes = plt.subplots(1, 2, figsize=(7, 4), sharex=False, sharey=True)
     axes = np.atleast_1d(axes)
 
     spin_labels = ['up', 'dn']
@@ -54,11 +54,20 @@ def plot_bands(mu_plot=0.0, D=0.0):
                 ls=spin_ls[spin_idx]
             )
 
-        ax.set_ylim(-50, 50)
-        ax.set_xlim(-0.12, 0.12)
+        ax.set_ylim(-23, 23)
+        # ax.set_xlim(-0.14, 0.14)
         ax.set_xticks([-0.1, 0, 0.1])
         # ax.set_yticks([-0.1, 0.0, 0.1])
         ax.tick_params(axis='both', labelsize=17)
+
+    
+    axes[0].set_xlim(-0.16, 0.14)
+    axes[1].set_xlim(-0.14, 0.14)    
+    
+    from matplotlib.lines import Line2D
+    legend_lines = [Line2D([0], [0], color='red'), Line2D([0], [0], color='blue', linestyle='--')]
+    axes[0].legend(legend_lines, [r'$\uparrow$', r'$\downarrow$'], fontsize=14, loc='upper left', handlelength=1.0, handletextpad=0.4) # loc='lower right'
+
     axes[0].set_ylabel(r'Energy (meV)', fontsize=18)
 
     # fig.text(0.53, 0.95, f'Delta={config.DELTA1UP} eV', ha='center', fontsize=18)
@@ -68,8 +77,9 @@ def plot_bands(mu_plot=0.0, D=0.0):
     # Save the figure
     output_path = config.FIGURES_DIR / 'energy_bands_modif.png'
     # plt.savefig(output_path, dpi=300)
+    fig.savefig(config.FIGURES_DIR / 'bands_master.svg', format='svg', bbox_inches='tight')
     # print(f"Plot saved to {output_path}")
     plt.show()
 
 if __name__ == "__main__":
-    plot_bands(mu_plot=0.0, D=0.02)
+    plot_bands(mu_plot=0.0, D=0.0)
