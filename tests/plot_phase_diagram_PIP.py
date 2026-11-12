@@ -13,7 +13,7 @@ from matplotlib.colors import BoundaryNorm
 
 import model.config as config
 
-data = np.load(config.DATA_DIR / "phase_diagram_nD_150pts.npz")
+data = np.load(config.DATA_DIR / "phase_diagram_nD_170pts_klim0.15_tables.npz")
 
 n_vals = data["n_vals"]
 n_pts = len(n_vals)

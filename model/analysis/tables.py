@@ -269,7 +269,6 @@ def table_cache_key(D, config, KX, mu_min, mu_max, n_table_pts):
         "gammas": [float(g) for g in (config.GAMMA0, config.GAMMA1,
                                       config.GAMMA2, config.GAMMA3,
                                       config.GAMMA4)],
-        "valley_idx": [int(v) for v in config.VALLEY_IDX],
         "deltas": np.asarray(config.DELTAS, dtype=float).tolist(),
         # --- unit conversion (enters n and E_kin in cm^-2) ---
         "a": float(config.a),
@@ -288,7 +287,7 @@ def table_cache_key(D, config, KX, mu_min, mu_max, n_table_pts):
     text = json.dumps(params, sort_keys=True)
 
     # 2) text -> bytes -> SHA-256 fingerprint -> first 16 hex characters
-    return hashlib.sha256(text.encode("utf-8")).hexdigest()[:16]
+    return hashlib.sha256(text.encode("utf-8")).hexdigest()[:16], params
 
 def get_or_build_tables(D, config, KX, KY, cache_dir, mu_min, mu_max, n_table_pts, rebuild=False, verbose=True):
     """
@@ -332,7 +331,7 @@ def get_or_build_tables(D, config, KX, KY, cache_dir, mu_min, mu_max, n_table_pt
     cache_dir = Path(cache_dir)
 
     # ---------- Name the computation ----------
-    key = table_cache_key(
+    key, params = table_cache_key(
         D, config, KX, mu_min, mu_max, n_table_pts,
     )
     # Human-readable D in the filename (in meV) + hash for safety.
@@ -378,6 +377,7 @@ def get_or_build_tables(D, config, KX, KY, cache_dir, mu_min, mu_max, n_table_pt
     np.savez_compressed(
         tmp_path,
         key=key,
+        params=json.dumps(params, sort_keys=True),
         D=float(D),
         mu_table=mu_table,
         n_table=n_table,

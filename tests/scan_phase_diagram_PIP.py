@@ -42,12 +42,12 @@ PHASE_TO_INDEX = {label: i for i, label in enumerate(config.PHASE_ORDER)}
 
 # --------- Grid (k-mesh) ---------
 # Deliberately coarser than config.N_PTS: the scan runs this thousands of times, and the table construction cost scales as N_PTS^2.
-N_PTS_SCAN = 5000
-K_LIM_SCAN = 0.20
+N_PTS_SCAN = 1500
+K_LIM_SCAN = 0.15
 # Verify on a few isolated points that the phase boundaries are converged in N_PTS before trusting a low-resolution scan.
 
 # --------- Interpolation Tables ---------
-MU_MIN, MU_MAX = -0.25, 0.25    # must cover mu_global - V_alpha everywhere
+MU_MIN, MU_MAX = -0.2, 0.2    # must cover mu_global - V_alpha everywhere
 N_TABLE = 3000
 
 # --------- SCF Parameters ---------

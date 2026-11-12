@@ -7,34 +7,49 @@ from model.analysis import (
     build_systems_with_displacement,
     precompute_flavor_bands,
     get_flavor_mu_from_densities,
+    get_or_build_tables,
     deriv_fermi_distrib,
 )
 
 # =========== Parameters ===========
-D = 20.1342-3               # fixed displacement field [eV]
-n_flavs = np.array([       # flavor densities [cm^-2]
-    -1.02394384e+12, -1.02394024e+12, -1.02394387e+12, -1.02394387e+12
-])
+DATA_FILE = "phase_diagram_nD_150pts.npz"   # file in config.DATA_DIR
+iD, iN = 60, 25                                   # point of the phase diagram
+
+# Must match the table settings used in the scan (they enter the cache key)
+CACHE_DIR = config.DATA_DIR / "tables_cache"
+MU_MIN, MU_MAX, N_TABLE = -0.20, 0.20, 2000
+
+K_PLOT = 0.12
+SHARED_SCALE = True
+K_PTS = 500
+
+# =========== Load the phase-diagram point ===========
+data = np.load(config.DATA_DIR / DATA_FILE, allow_pickle=True)
+D = float(data["D_vals"][iD])
+n_flavs = data["density_map"][iD, iN]
 n_tot = np.sum(n_flavs)
+N_PTS_SCAN = int(data["n_pts_scan"])
+K_LIM_SCAN = float(data["k_lim_scan"])
 
-K_PLOT = 0.12              # half-width of the plotted k-window (Fermi surface)
-SHARED_SCALE = True        # same color scale in all Fermi-surface panels
-K_PTS = 500                # points along the k-path for the band plot
+if not np.all(np.isfinite(n_flavs)):
+    raise ValueError(f"Point (iD={iD}, iN={iN}) did not converge in the scan (NaN densities).")
 
-print(f"Bands + Fermi surface for D = {D*1e3:.2f} meV and n = {n_tot:.3e} cm^-2...")
+print(f"Bands + Fermi surface for D = {D*1e3:.2f} meV and n = {n_tot:.3e} cm^-2")
+print(f"Phase: {data['phase_labels'][iD, iN]} | flavor densities: {n_flavs}")
 
-# =========== k-mesh, systems, bands (2D) ===========
-KX, KY = get_kmesh(config.K_LIM, config.N_PTS)
-dk = KX[0, 1] - KX[0, 0]
-prefactor = (dk**2) / (2 * np.pi)**2
+# =========== k-mesh (same as the scan, so the tables are consistent) ===========
+KX, KY = get_kmesh(K_LIM_SCAN, N_PTS_SCAN)
 
 systems, _ = build_systems_with_displacement(D, config)
 all_bands = precompute_flavor_bands(systems, KX, KY)
 
-# =========== Flavor chemical potentials ===========
+# =========== Flavor chemical potentials from cached tables ===========
+mu_table, n_table, _ = get_or_build_tables(
+    D, config, KX, KY, CACHE_DIR, MU_MIN, MU_MAX, N_TABLE,
+)
 mu_flavs = get_flavor_mu_from_densities(
-    n_flavs, all_bands, config.T_eff, prefactor, config.unit_cell_to_cm2,
-    # mu_min=-0.5, mu_max=0.2,
+    n_flavs, all_bands, config.T_eff, None, config.unit_cell_to_cm2,
+    tables=(mu_table, n_table),
 )
 print(f"Found mu_alpha (meV): {mu_flavs*1e3}")
 

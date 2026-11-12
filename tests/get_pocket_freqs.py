@@ -15,7 +15,7 @@ from model.analysis import (
     merge_orbits,
 )
 
-iD = 50
+iD = 60
 THRESHOLD = 1e6          # flavor counted as occupied [cm^-2]
 SAVE_FIG = True
 

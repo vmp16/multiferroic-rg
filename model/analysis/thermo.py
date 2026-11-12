@@ -10,6 +10,7 @@ get_flavor_mu_from_densities
 get_flavor_dos
 get_flavor_kinetic_energy_from_bands
 get_part_density
+get_density_matrix
 get_fermi_pockets
 """
 
@@ -27,6 +28,7 @@ __all__ = [
     "get_flavor_dos",
     "get_flavor_kinetic_energy_from_bands",
     "get_part_density",
+    "get_density_matrix",
     "get_fermi_pockets",
 ]
 
@@ -201,6 +203,38 @@ def get_part_density(system, px, py, T, mu):
     
     # Unit factor set to 1.0 to retain the original [states / unit cell] return value
     return get_flavor_density_from_bands(bands, mu, T, prefactor, unit_cell_to_cm2=1.0)
+
+def get_density_matrix(system, px, py, mu, T, reference="half"):
+    """
+    Build the density matrix for a given flavor, i.e. 2x2 matrix, using band-projectors.
+
+    The density is calculated with respect to the given reference point:
+        reference = "none"    : full rho              (Tr = f+ + f-)
+                    "valence" : rho - P-              (Tr = f+ + f- - 1)
+                    "half"    : rho - 1/2 * identity  (Tr = f+ + f- - 1)
+    """
+    # Build the bands because we also need abs(eigenvalue) = epsilon
+    X, D = system.X_at_k(px, py), system.Delta
+    eps = np.sqrt(D**2 + np.abs(X)**2)
+    h0 = system.get_h0_at_k(px, py)
+
+    E0, E1 = h0 + eps, h0 - eps
+
+    fp = fermi_distrib(E0, mu, T)
+    fm = fermi_distrib(E1, mu, T)
+
+    s = 0.5 * (fp + fm) - (0.0 if reference == "none" else 0.5)
+    num = 0.5 * (fp - fm) + (0.5 if reference == "valence" else 0.0)
+    w = np.divide(num, eps, out=np.zeros_like(eps), where= eps > 1e-14)     # where -> avoid division by 0
+                                                                            # out -> 0 whenever "where" is False
+
+    rho = np.empty((2, 2, *np.shape(eps)), dtype=complex)
+    rho[0, 0] = s + w * D
+    rho[1, 1] = s - w * D
+    rho[0, 1] = w * X
+    rho[1, 0] = w * np.conj(X)
+    
+    return rho
 
 
 def get_fermi_pockets(bands, mu, KX, KY, dk, unit_cell_to_cm2,
