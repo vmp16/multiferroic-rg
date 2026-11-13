@@ -10,19 +10,24 @@ DATA_DIR = PROJECT_ROOT / 'data'
 N = 5
 
 # Lattice constants
-a = 2.46          # Lattice constant [Å]
+a = 2.46                                    # Lattice constant [Å]
 area_uc = (np.sqrt(3) / 2) * (a * 1e-8)**2  # unit cell area [cm^2]
 unit_cell_to_cm2 = 1.0 / area_uc
-# Out of plane
-# c = 3.35          # Å
+c = 3.35                                    # interlayer distance [Å]
+d_layers = (N - 1) * c / a                         # distance between outermost layers, in units of a
 
 # Hopping parameters for ABC Graphene, in eV
 # Values from Huang's Suppl. Mat.
 GAMMA0 = 3.16       # In-layer hopping
 GAMMA1 = 0.380      # Nearest-layer vertical hopping
-GAMMA2 = -0.015    # Next-nearest-layer hopping
+GAMMA2 = -0.015     # Next-nearest-layer hopping
 GAMMA3 = -0.290     # Trigonal warping hopping
 GAMMA4 = -0.141     # Second-order hopping
+
+# Coulomb's Parameters
+k_e = 14.4                                  # gaussian e^2 [eV·Å]
+EPS_R = 10                                  # dielectric constant
+e2_over_eps = k_e / (EPS_R * a)             # eV·a;   in Gaussian units e^2 -> k_e
 
 # Numerical Parameters
 N_PTS = 6000
@@ -79,7 +84,3 @@ PHASE_ORDER = [
     "2-1-1",        # 4 active, one pair + 2 distinct
     "1-1-1-1",      # 4 active, all distinct
 ]
-
-# Constants for Coulomb's interaction
-k_e = 14.4                              # eV · Å,  from Das & Huang
-e2_over_eps = k_e / a                   # eV · a;   in Gaussian units e^2 -> k_e

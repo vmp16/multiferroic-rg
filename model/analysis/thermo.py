@@ -204,36 +204,46 @@ def get_part_density(system, px, py, T, mu):
     # Unit factor set to 1.0 to retain the original [states / unit cell] return value
     return get_flavor_density_from_bands(bands, mu, T, prefactor, unit_cell_to_cm2=1.0)
 
-def get_density_matrix(system, px, py, mu, T, reference="half"):
+def get_density_matrix(system, px, py, mu, T, reference="half", Delta_ref=0.0):
     """
-    Build the density matrix for a given flavor, i.e. 2x2 matrix, using band-projectors.
+    Density matrix rho(k) of one flavor, shape (2, 2, *px.shape), basis (A1, BN) = (top, bottom).
 
-    The density is calculated with respect to the given reference point:
-        reference = "none"    : full rho              (Tr = f+ + f-)
-                    "valence" : rho - P-              (Tr = f+ + f- - 1)
-                    "half"    : rho - 1/2 * identity  (Tr = f+ + f- - 1)
+    reference : what is subtracted from the full rho = f+ P+ + f- P-
+        "none"    : nothing                                (Tr = f+ + f-)
+        "half"    : 1/2 * identity                         (Tr = f+ + f- - 1)
+        "valence" : P- of the same H (same Delta)          (Tr = f+ + f- - 1)
+        "cnp"     : P- of H with gap Delta_ref, same X     (Tr = f+ + f- - 1)
+                    Delta_ref = intrinsic delta_alpha without D (0 in the current config)
     """
-    # Build the bands because we also need abs(eigenvalue) = epsilon
+    if reference not in ("none", "half", "valence", "cnp"):
+        raise ValueError(f"unknown reference '{reference}'")
+
     X, D = system.X_at_k(px, py), system.Delta
     eps = np.sqrt(D**2 + np.abs(X)**2)
     h0 = system.get_h0_at_k(px, py)
 
-    E0, E1 = h0 + eps, h0 - eps
-
-    fp = fermi_distrib(E0, mu, T)
-    fm = fermi_distrib(E1, mu, T)
+    fp = fermi_distrib(h0 + eps, mu, T)
+    fm = fermi_distrib(h0 - eps, mu, T)
 
     s = 0.5 * (fp + fm) - (0.0 if reference == "none" else 0.5)
-    num = 0.5 * (fp - fm) + (0.5 if reference == "valence" else 0.0)
-    w = np.divide(num, eps, out=np.zeros_like(eps), where= eps > 1e-14)     # where -> avoid division by 0
-                                                                            # out -> 0 whenever "where" is False
+    w = np.divide(0.5 * (fp - fm), eps, out=np.zeros_like(eps), where=eps > 1e-14)
 
     rho = np.empty((2, 2, *np.shape(eps)), dtype=complex)
     rho[0, 0] = s + w * D
     rho[1, 1] = s - w * D
     rho[0, 1] = w * X
     rho[1, 0] = w * np.conj(X)
-    
+
+    # Subtract the valence projector P- = 1/2 (1 - [[D_ref, X], [X*, -D_ref]] / eps_ref)
+    if reference in ("valence", "cnp"):
+        D_ref = D if reference == "valence" else Delta_ref
+        eps_ref = np.sqrt(D_ref**2 + np.abs(X)**2)
+        w_ref = np.divide(0.5, eps_ref, out=np.zeros_like(eps_ref), where=eps_ref > 1e-14)
+        rho[0, 0] += w_ref * D_ref
+        rho[1, 1] -= w_ref * D_ref
+        rho[0, 1] += w_ref * X
+        rho[1, 0] += w_ref * np.conj(X)
+
     return rho
 
 
