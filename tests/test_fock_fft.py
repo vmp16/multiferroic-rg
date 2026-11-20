@@ -1,4 +1,6 @@
 """
+NOTE: made by Claude.ai
+
 Check that the FFT Fock self-energy reproduces the direct summation (same discretized V).
 
 Tests
@@ -19,7 +21,9 @@ import numpy as np
 import model.config as config
 from model.analysis import (
     get_kmesh,
+    fermi_distrib,
     build_systems_with_displacement,
+    density_matrix_from_arrays,
     get_density_matrix,
     coulomb_kernels,
     get_fock_self_energy_direct,
@@ -100,6 +104,35 @@ def test_structure():
     assert np.max(np.abs(S[0, 0].imag)) < 1e-9 * np.max(np.abs(S[0, 0])), "Sigma_11 not real"
     assert np.max(np.abs(S[1, 1].imag)) < 1e-9 * np.max(np.abs(S[1, 1])), "Sigma_22 not real"
 
+def test_array_version_with_synthetic_self_energy():
+    system = build_systems_with_displacement(0.02, config)[0][0]
+    rng = np.random.default_rng(5)
+    nk, mu = 200, 0.01
+    px, py = rng.uniform(-K_LIM, K_LIM, nk), rng.uniform(-K_LIM, K_LIM, nk)
+    X = system.X_at_k(px, py)
+    h0 = np.broadcast_to(system.get_h0_at_k(px, py), px.shape)
+
+    S0 = 0.01 * rng.normal(size=nk)                       # fake Sigma_0, Sigma_z, Sigma_12 [eV]
+    Sz = 0.01 * rng.normal(size=nk)
+    S12 = 0.01 * (rng.normal(size=nk) + 1j * rng.normal(size=nk))
+    h0e, De, Xe = h0 + S0, system.Delta + Sz, X + S12
+
+    def H_of(h, D, Xk):
+        H = np.zeros((nk, 2, 2), dtype=complex)
+        H[:, 0, 0], H[:, 1, 1], H[:, 0, 1], H[:, 1, 0] = D, -D, Xk, np.conj(Xk)
+        return H + h[:, None, None] * np.eye(2)
+
+    E, V = np.linalg.eigh(H_of(h0e, De, Xe))
+    rho_num = np.einsum("kan,kn,kbn->kab", V, fermi_distrib(E, mu, config.T_eff), V.conj())
+    D_ref = 0.003                                         # any fixed reference gap
+    _, Vr = np.linalg.eigh(H_of(np.zeros(nk), np.full(nk, D_ref), X))
+    P_ref = np.einsum("ka,kb->kab", Vr[:, :, 0], Vr[:, :, 0].conj())
+
+    rho = density_matrix_from_arrays(h0e, De, Xe, mu, config.T_eff,
+                                     reference="projector", Delta_ref=D_ref, X_ref=X)
+    rho = np.moveaxis(rho, (0, 1), (-2, -1))
+    assert np.allclose(rho, rho_num - P_ref, atol=1e-10)
+
 
 def timing_report(N=60):
     """Not a test: just prints the speed-up."""
@@ -116,7 +149,7 @@ def timing_report(N=60):
 
 if __name__ == "__main__":
     tests = [test_kernel_symmetry, test_random_rho_even_and_odd_mesh,
-             test_physical_rho, test_structure]
+             test_physical_rho, test_structure, test_array_version_with_synthetic_self_energy]
     n_failed = 0
     for t in tests:
         try:

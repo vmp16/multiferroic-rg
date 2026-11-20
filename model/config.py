@@ -10,10 +10,10 @@ DATA_DIR = PROJECT_ROOT / 'data'
 N = 5
 
 # Lattice constants
-a = 2.46                                    # Lattice constant [Å]
-area_uc = (np.sqrt(3) / 2) * (a * 1e-8)**2  # unit cell area [cm^2]
+a = 2.46                                           # Lattice constant [Å]
+area_uc = (np.sqrt(3) / 2) * (a * 1e-8)**2         # unit cell area [cm^2], NOTE: SHOULD IT BE JUST 1/a^2 ???
 unit_cell_to_cm2 = 1.0 / area_uc
-c = 3.35                                    # interlayer distance [Å]
+c = 3.35                                           # interlayer distance [Å]
 d_layers = (N - 1) * c / a                         # distance between outermost layers, in units of a
 
 # Hopping parameters for ABC Graphene, in eV

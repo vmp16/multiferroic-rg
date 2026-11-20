@@ -30,3 +30,4 @@ from .tables       import *
 from .phases       import *
 from .pockets      import *
 from .hf           import *
+from .hf_scf       import *

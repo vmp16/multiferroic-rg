@@ -117,10 +117,38 @@ def test_against_numerical_diagonalization():
                     f"mismatch with diagonalization: flavor {a}, D={D}, ref={reference}, " \
                     f"max |diff| = {np.max(np.abs(rho - rho_ref)):.2e}"
 
+def test_array_version_with_synthetic_self_energy():
+    system = build_systems_with_displacement(0.02, config)[0][0]
+    rng = np.random.default_rng(5)
+    nk, mu = 200, 0.01
+    px, py = rng.uniform(-K_LIM, K_LIM, nk), rng.uniform(-K_LIM, K_LIM, nk)
+    X = system.X_at_k(px, py)
+    h0 = np.broadcast_to(system.get_h0_at_k(px, py), px.shape)
+
+    S0 = 0.01 * rng.normal(size=nk)                       # fake Sigma_0, Sigma_z, Sigma_12 [eV]
+    Sz = 0.01 * rng.normal(size=nk)
+    S12 = 0.01 * (rng.normal(size=nk) + 1j * rng.normal(size=nk))
+    h0e, De, Xe = h0 + S0, system.Delta + Sz, X + S12
+
+    def H_of(h, D, Xk):
+        H = np.zeros((nk, 2, 2), dtype=complex)
+        H[:, 0, 0], H[:, 1, 1], H[:, 0, 1], H[:, 1, 0] = D, -D, Xk, np.conj(Xk)
+        return H + h[:, None, None] * np.eye(2)
+
+    E, V = np.linalg.eigh(H_of(h0e, De, Xe))
+    rho_num = np.einsum("kan,kn,kbn->kab", V, fermi_distrib(E, mu, config.T_eff), V.conj())
+    D_ref = 0.003                                         # any fixed reference gap
+    _, Vr = np.linalg.eigh(H_of(np.zeros(nk), np.full(nk, D_ref), X))
+    P_ref = np.einsum("ka,kb->kab", Vr[:, :, 0], Vr[:, :, 0].conj())
+
+    rho = density_matrix_from_arrays(h0e, De, Xe, mu, config.T_eff,
+                                     reference="projector", Delta_ref=D_ref, X_ref=X)
+    rho = np.moveaxis(rho, (0, 1), (-2, -1))
+    assert np.allclose(rho, rho_num - P_ref, atol=1e-10)
 
 if __name__ == "__main__":
     tests = [test_trace_matches_flavor_density, test_hermitian, test_valence_reference_is_projector,
-             test_against_numerical_diagonalization]
+             test_against_numerical_diagonalization, test_array_version_with_synthetic_self_energy]
     n_failed = 0
     for t in tests:
         try:

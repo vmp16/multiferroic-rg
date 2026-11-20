@@ -96,13 +96,13 @@ def build_systems_with_displacement(D, config):
     Returns
     -------
     systems : list of McCannCarts, length 4
-        Systems in the canonical flavor order (K↑, K'↓, K↓, K'↑).
+        Systems in the canonical flavor order (K↑, K'↑, K↓, K'↓).
     base_deltas : ndarray, shape (4,)
         Intrinsic gap values delta_alpha (without D), in the same order.
     """
     from model.model import McCannCarts
 
-    valley_indices = 2 * config.VALLEY_IDX           # [1,-1] → [1,-1,1,-1]
+    valley_indices = 2 * config.VALLEY_IDX           # [1,-1] → [1, -1, 1, -1]
     base_deltas    = config.DELTAS.T.flatten()       # shape (4,)
     e0_vals        = config.E0_ARRAY.T.flatten()     # shape (4,)
 

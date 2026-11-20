@@ -12,16 +12,16 @@ from model.analysis import (
 )
 
 # =========== Parameters ===========
-DATA_FILE = "phase_diagram_nD_150pts.npz"   # file in config.DATA_DIR
-iD, iN = 60, 25                                   # point of the phase diagram
+DATA_FILE = "phase_diagram_nD_HF_30x30pts_opt.npz"   # file in config.DATA_DIR
+iD, iN = 0, 4                                   # point of the phase diagram
 
 # Must match the table settings used in the scan (they enter the cache key)
 CACHE_DIR = config.DATA_DIR / "tables_cache"
-MU_MIN, MU_MAX, N_TABLE = -0.20, 0.20, 2000
+MU_MIN, MU_MAX, N_TABLE = -0.25, 0.25, 2000
 
 K_PLOT = 0.12
 SHARED_SCALE = True
-K_PTS = 500
+K_PTS = 300
 
 # =========== Load the phase-diagram point ===========
 data = np.load(config.DATA_DIR / DATA_FILE, allow_pickle=True)

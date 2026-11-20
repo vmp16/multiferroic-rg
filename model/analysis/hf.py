@@ -1,4 +1,6 @@
 """
+NOTE: made by Claude.ai
+
 Hartree-Fock functions: Coulomb kernels, Fock self-energy (direct and FFT), layer Hartree term.
 
 Conventions: k and p in units of 1/a, e2_over_eps in eV·a, d in units of a, Sigma in eV.

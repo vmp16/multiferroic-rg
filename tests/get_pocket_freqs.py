@@ -15,12 +15,12 @@ from model.analysis import (
     merge_orbits,
 )
 
-iD = 60
+iD = 0
 THRESHOLD = 1e6          # flavor counted as occupied [cm^-2]
-SAVE_FIG = True
+SAVE_FIG = False
 
 # ------------ Load the phase diagram ------------
-filename = "phase_diagram_nD_150pts.npz"
+filename = "phase_diagram_nD_HF_20x20pts_opt.npz"
 
 print(f"  Reading phase diagram scan: {filename}...")
 

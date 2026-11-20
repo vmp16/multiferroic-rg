@@ -10,6 +10,8 @@ get_flavor_mu_from_densities
 get_flavor_dos
 get_flavor_kinetic_energy_from_bands
 get_part_density
+get_bands_from_arrays
+density_matrix_from_arrays
 get_density_matrix
 get_fermi_pockets
 """
@@ -28,6 +30,8 @@ __all__ = [
     "get_flavor_dos",
     "get_flavor_kinetic_energy_from_bands",
     "get_part_density",
+    "get_bands_from_arrays",
+    "density_matrix_from_arrays",
     "get_density_matrix",
     "get_fermi_pockets",
 ]
@@ -204,23 +208,42 @@ def get_part_density(system, px, py, T, mu):
     # Unit factor set to 1.0 to retain the original [states / unit cell] return value
     return get_flavor_density_from_bands(bands, mu, T, prefactor, unit_cell_to_cm2=1.0)
 
-def get_density_matrix(system, px, py, mu, T, reference="half", Delta_ref=0.0):
+def get_bands_from_arrays(h0, Delta, X):
     """
-    Density matrix rho(k) of one flavor, shape (2, 2, *px.shape), basis (A1, BN) = (top, bottom).
+    NOTE: made by Claude.ai
 
-    reference : what is subtracted from the full rho = f+ P+ + f- P-
-        "none"    : nothing                                (Tr = f+ + f-)
-        "half"    : 1/2 * identity                         (Tr = f+ + f- - 1)
-        "valence" : P- of the same H (same Delta)          (Tr = f+ + f- - 1)
-        "cnp"     : P- of H with gap Delta_ref, same X     (Tr = f+ + f- - 1)
-                    Delta_ref = intrinsic delta_alpha without D (0 in the current config)
+    Bands (E+, E-) of the 2x2 Hamiltonian h0*1 + [[Delta, X], [X*, -Delta]], from arrays.
+    Same format as system.get_energy, so it can be passed to get_flavor_density_from_bands.
     """
-    if reference not in ("none", "half", "valence", "cnp"):
+    eps = np.sqrt(np.asarray(Delta, dtype=float) ** 2 + np.abs(X) ** 2)
+    return h0 + eps, h0 - eps
+
+
+def density_matrix_from_arrays(h0, Delta, X, mu, T, reference="projector", Delta_ref=0.0, X_ref=None):
+    """
+    NOTE: made by Claude.ai
+
+    Density matrix rho(k) = f(E+) P+ + f(E-) P- (minus a reference) of the 2x2 Hamiltonian
+    h0·Id + [[Delta, X], [X*, -Delta]], with (h0, Delta, X) given as arrays on a k-mesh.
+    Delta may also be a scalar.
+    
+    Returns an array (2, 2, *X.shape), basis (A1, BN) = (top, bottom).
+
+    reference:
+        "none"       : nothing subtracted                           (Tr = f+ + f-)
+        "half"       : 1/2 · Id                                     (Tr = f+ + f- - 1)
+        "projector"  : valence projector P- of the FIXED reference Hamiltonian with gap Delta_ref
+                       and off-diagonal X_ref (default X)           (Tr = f+ + f- - 1)
+                       Delta_ref = intrinsic gap at u = 0 -> charge-neutrality reference ("cnp")
+                       Delta_ref = Delta of the bare system        -> "valence" reference
+    In a self-consistent loop pass X_ref = BARE X(k), so that the subtracted background
+    does not depend on the self-energy.
+    """
+    if reference not in ("none", "half", "projector"):
         raise ValueError(f"unknown reference '{reference}'")
 
-    X, D = system.X_at_k(px, py), system.Delta
-    eps = np.sqrt(D**2 + np.abs(X)**2)
-    h0 = system.get_h0_at_k(px, py)
+    Delta = np.asarray(Delta, dtype=float)
+    eps = np.sqrt(Delta**2 + np.abs(X) ** 2)
 
     fp = fermi_distrib(h0 + eps, mu, T)
     fm = fermi_distrib(h0 - eps, mu, T)
@@ -229,22 +252,88 @@ def get_density_matrix(system, px, py, mu, T, reference="half", Delta_ref=0.0):
     w = np.divide(0.5 * (fp - fm), eps, out=np.zeros_like(eps), where=eps > 1e-14)
 
     rho = np.empty((2, 2, *np.shape(eps)), dtype=complex)
-    rho[0, 0] = s + w * D
-    rho[1, 1] = s - w * D
+    rho[0, 0] = s + w * Delta
+    rho[1, 1] = s - w * Delta
     rho[0, 1] = w * X
     rho[1, 0] = w * np.conj(X)
 
-    # Subtract the valence projector P- = 1/2 (1 - [[D_ref, X], [X*, -D_ref]] / eps_ref)
-    if reference in ("valence", "cnp"):
-        D_ref = D if reference == "valence" else Delta_ref
-        eps_ref = np.sqrt(D_ref**2 + np.abs(X)**2)
+    # Subtract P_ref = 1/2 (1 - [[D_ref, X_ref], [X_ref*, -D_ref]] / eps_ref); the 1/2*1 part is in s
+    if reference == "projector":
+        Xr = X if X_ref is None else X_ref
+        eps_ref = np.sqrt(Delta_ref**2 + np.abs(Xr) ** 2)
         w_ref = np.divide(0.5, eps_ref, out=np.zeros_like(eps_ref), where=eps_ref > 1e-14)
-        rho[0, 0] += w_ref * D_ref
-        rho[1, 1] -= w_ref * D_ref
-        rho[0, 1] += w_ref * X
-        rho[1, 0] += w_ref * np.conj(X)
+        rho[0, 0] += w_ref * Delta_ref
+        rho[1, 1] -= w_ref * Delta_ref
+        rho[0, 1] += w_ref * Xr
+        rho[1, 0] += w_ref * np.conj(Xr)
 
     return rho
+
+
+def get_density_matrix(system, px, py, mu, T, reference="half", Delta_ref=0.0):
+    """
+    NOTE: made by Claude.ai
+
+    rho(k) of one flavor of the bare model (no self-energy), shape (2, 2, *px.shape).
+    reference = "none" | "half" | "valence" (P- of the same H) | "cnp" (P- with gap Delta_ref).
+    See density_matrix_from_arrays.
+    """
+    if reference not in ("none", "half", "valence", "cnp"):
+        raise ValueError(f"unknown reference '{reference}'")
+
+    X = system.X_at_k(px, py)
+    h0 = system.get_h0_at_k(px, py)
+
+    if reference == "valence":
+        mode, D_ref = "projector", system.Delta
+    elif reference == "cnp":
+        mode, D_ref = "projector", Delta_ref
+    else:
+        mode, D_ref = reference, 0.0
+
+    return density_matrix_from_arrays(h0, system.Delta, X, mu, T, reference=mode, Delta_ref=D_ref)
+
+# def get_density_matrix(system, px, py, mu, T, reference="half", Delta_ref=0.0):
+#     """
+#     Density matrix rho(k) of one flavor, shape (2, 2, *px.shape), basis (A1, BN) = (top, bottom).
+
+#     reference : what is subtracted from the full rho = f+ P+ + f- P-
+#         "none"    : nothing                                (Tr = f+ + f-)
+#         "half"    : 1/2 * identity                         (Tr = f+ + f- - 1)
+#         "valence" : P- of the same H (same Delta)          (Tr = f+ + f- - 1)
+#         "cnp"     : P- of H with gap Delta_ref, same X     (Tr = f+ + f- - 1)
+#                     Delta_ref = intrinsic delta_alpha without D (0 in the current config)
+#     """
+#     if reference not in ("none", "half", "valence", "cnp"):
+#         raise ValueError(f"unknown reference '{reference}'")
+
+#     X, D = system.X_at_k(px, py), system.Delta
+#     eps = np.sqrt(D**2 + np.abs(X)**2)
+#     h0 = system.get_h0_at_k(px, py)
+
+#     fp = fermi_distrib(h0 + eps, mu, T)
+#     fm = fermi_distrib(h0 - eps, mu, T)
+
+#     s = 0.5 * (fp + fm) - (0.0 if reference == "none" else 0.5)
+#     w = np.divide(0.5 * (fp - fm), eps, out=np.zeros_like(eps), where=eps > 1e-14)
+
+#     rho = np.empty((2, 2, *np.shape(eps)), dtype=complex)
+#     rho[0, 0] = s + w * D
+#     rho[1, 1] = s - w * D
+#     rho[0, 1] = w * X
+#     rho[1, 0] = w * np.conj(X)
+
+#     # Subtract the valence projector P- = 1/2 (1 - [[D_ref, X], [X*, -D_ref]] / eps_ref)
+#     if reference in ("valence", "cnp"):
+#         D_ref = D if reference == "valence" else Delta_ref
+#         eps_ref = np.sqrt(D_ref**2 + np.abs(X)**2)
+#         w_ref = np.divide(0.5, eps_ref, out=np.zeros_like(eps_ref), where=eps_ref > 1e-14)
+#         rho[0, 0] += w_ref * D_ref
+#         rho[1, 1] -= w_ref * D_ref
+#         rho[0, 1] += w_ref * X
+#         rho[1, 0] += w_ref * np.conj(X)
+
+#     return rho
 
 
 def get_fermi_pockets(bands, mu, KX, KY, dk, unit_cell_to_cm2,
