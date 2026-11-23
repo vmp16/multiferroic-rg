@@ -18,8 +18,8 @@ from matplotlib.colors import BoundaryNorm, LogNorm
 
 import model.config as config
 
-DATA_FILE = config.DATA_DIR / "phase_diagram_nD_HF_30x30pts_opt.npz"     # match the scan's N_POINTS x D_POINTS
-PRINT_POINT = (0, 7)               # (iD, iN) to print and highlight
+DATA_FILE = config.DATA_DIR / "phase_diagram_nD_HF_40x40pts.npz"     # match the scan's N_POINTS x D_POINTS
+PRINT_POINT = (25, 5)               # (iD, iN) to print and highlight
 
 data = np.load(DATA_FILE, allow_pickle=True)       # allow_pickle: phase_labels / winner_kind are object arrays
 
@@ -35,6 +35,10 @@ n_pts_scan = int(data["n_pts_scan"])
 # Failed points -> NaN so they render as blank rather than as a phase
 phase_map[phase_map < 0] = np.nan
 dE_next = np.where(dE_next_map > 0, dE_next_map, np.nan)
+
+# TEST: sigma_row for the band structure plot
+# sigma_row = data["sigma_row"]
+# print("Sigma row check: shape = ", sigma_row.shape)
 
 # ---------------------------------------------------------
 # Printing one configuration
